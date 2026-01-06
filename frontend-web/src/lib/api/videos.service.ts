@@ -207,9 +207,24 @@ export const videosService = {
   },
 
   /**
-   * Upload de vídeo via backend usando XMLHttpRequest (sem timeout)
-   * O backend recebe o arquivo e faz upload TUS para Cloudflare em background
-   * XMLHttpRequest não tem timeout padrão, permitindo uploads muito grandes
+   * Obter URL de upload TUS direto para Cloudflare (para arquivos grandes)
+   * O backend gera uma URL TUS autenticada, o frontend faz upload direto para Cloudflare
+   */
+  async getTusUploadUrl(
+    moduleId: string,
+    metadata: { title: string; description?: string; order: number; fileSize: number; filename: string }
+  ): Promise<{ tusUploadUrl: string; uid: string; videoId: string; video: Video }> {
+    const response = await apiClient.post<{ tusUploadUrl: string; uid: string; videoId: string; video: Video }>(
+      `/modules/${moduleId}/videos/tus-upload-url`,
+      metadata
+    );
+    return response.data;
+  },
+
+  /**
+   * Upload de vídeo via TUS direto para Cloudflare (SEM PASSAR PELO BACKEND!)
+   * O arquivo é enviado diretamente do navegador para o Cloudflare usando TUS protocol
+   * Ideal para arquivos grandes - sem limite de tamanho!
    */
   async uploadVideoTusDirect(
     moduleId: string,
@@ -218,90 +233,73 @@ export const videosService = {
     onProgress?: (progress: number) => void,
     onStatusChange?: (status: 'preparing' | 'uploading' | 'processing' | 'done' | 'error', message?: string) => void
   ): Promise<Video> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-    
-    return new Promise((resolve, reject) => {
-      onStatusChange?.('preparing', 'Preparando upload...');
-      console.log('[Backend Upload] Starting upload via backend');
-      console.log('[Backend Upload] File size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', metadata.title);
-      if (metadata.description) {
-        formData.append('description', metadata.description);
-      }
-      formData.append('order', metadata.order.toString());
+    try {
+      onStatusChange?.('preparing', 'Preparando upload TUS...');
+      console.log('[TUS Direct] Starting upload');
+      console.log('[TUS Direct] File size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-      const xhr = new XMLHttpRequest();
-      
-      // Evento de progresso do upload
-      xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-          // Mapear progresso HTTP (0-100%) para fase 1 (0-50%)
-          // O backend faz TUS em background (fase 2: 50-100%)
-          const httpProgress = (event.loaded / event.total) * 100;
-          const mappedProgress = httpProgress * 0.5; // 0-50%
-          console.log(`[Backend Upload] HTTP Progress: ${httpProgress.toFixed(2)}% -> Mapped: ${mappedProgress.toFixed(2)}%`);
-          onProgress?.(mappedProgress);
-          
-          if (httpProgress >= 100) {
-            onStatusChange?.('processing', 'Arquivo recebido! Backend processando...');
-          }
-        }
+      // Fase 1: Obter URL TUS do backend (cria registro no banco e obtém URL autenticada)
+      const { tusUploadUrl, uid, videoId, video } = await this.getTusUploadUrl(moduleId, {
+        ...metadata,
+        fileSize: file.size,
+        filename: file.name,
       });
-      
-      // Evento de conclusão
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const video = JSON.parse(xhr.responseText) as Video;
-            console.log('[Backend Upload] Upload completed. Video ID:', video.id);
+
+      console.log('[TUS Direct] TUS URL obtained:', tusUploadUrl);
+      console.log('[TUS Direct] Video ID:', videoId, 'Cloudflare UID:', uid);
+
+      // Fase 2: Upload TUS diretamente para Cloudflare
+      onStatusChange?.('uploading', 'Enviando diretamente para Cloudflare...');
+
+      return new Promise((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          // URL TUS autenticada obtida do backend
+          uploadUrl: tusUploadUrl,
+          // Chunk de ~50MB (52.4MB é múltiplo de 256KiB, recomendado pelo Cloudflare)
+          chunkSize: 52428800,
+          // Retries em caso de falha
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          // Metadata
+          metadata: {
+            filename: file.name,
+            filetype: file.type || 'video/mp4',
+          },
+          // Callback de progresso
+          onProgress: (bytesUploaded, bytesTotal) => {
+            const percentage = (bytesUploaded / bytesTotal) * 100;
+            const sizeMB = bytesTotal / (1024 * 1024);
+            const uploadedMB = bytesUploaded / (1024 * 1024);
+            console.log(`[TUS Direct] Progress: ${percentage.toFixed(2)}% (${uploadedMB.toFixed(2)}MB / ${sizeMB.toFixed(2)}MB)`);
+            onProgress?.(percentage);
+          },
+          // Callback de sucesso
+          onSuccess: () => {
+            console.log('[TUS Direct] Upload completed successfully!');
             onStatusChange?.('processing', 'Upload concluído! Cloudflare processando...');
-            onProgress?.(50); // 50% - Backend recebeu, agora é TUS em background
-            resolve(video);
-          } catch (e) {
-            console.error('[Backend Upload] Failed to parse response');
-            reject(new Error('Erro ao processar resposta do servidor'));
-          }
-        } else {
-          console.error('[Backend Upload] Failed:', xhr.status, xhr.responseText);
-          let errorMsg = 'Erro no upload';
-          try {
-            const errorData = JSON.parse(xhr.responseText);
-            errorMsg = errorData.message || errorMsg;
-          } catch (e) {}
-          onStatusChange?.('error', errorMsg);
-          reject(new Error(errorMsg));
-        }
+            onProgress?.(100);
+            resolve({
+              ...video,
+              uploadStatus: 'PROCESSING' as const,
+              uploadProgress: 100,
+            });
+          },
+          // Callback de erro
+          onError: (error) => {
+            console.error('[TUS Direct] Upload error:', error);
+            onStatusChange?.('error', error.message || 'Erro no upload TUS');
+            reject(new Error(`Erro no upload TUS: ${error.message}`));
+          },
+        });
+
+        // Iniciar upload
+        console.log('[TUS Direct] Starting TUS upload...');
+        upload.start();
       });
-      
-      // Evento de erro de rede
-      xhr.addEventListener('error', () => {
-        console.error('[Backend Upload] Network error');
-        onStatusChange?.('error', 'Erro de rede. Verifique sua conexão.');
-        reject(new Error('Erro de rede. Verifique sua conexão e tente novamente.'));
-      });
-      
-      // Evento de abort
-      xhr.addEventListener('abort', () => {
-        console.log('[Backend Upload] Aborted');
-        onStatusChange?.('error', 'Upload cancelado');
-        reject(new Error('Upload cancelado'));
-      });
-      
-      // Configurar e enviar requisição
-      // IMPORTANTE: XMLHttpRequest não tem timeout padrão (infinito)
-      const token = localStorage.getItem('accessToken');
-      xhr.open('POST', `${API_BASE_URL}/modules/${moduleId}/videos/upload-file`);
-      if (token) {
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      }
-      
-      onStatusChange?.('uploading', 'Enviando para servidor...');
-      console.log('[Backend Upload] Sending to:', `${API_BASE_URL}/modules/${moduleId}/videos/upload-file`);
-      xhr.send(formData);
-    });
+    } catch (error: any) {
+      console.error('[TUS Direct] Error:', error);
+      onStatusChange?.('error', error.message);
+      throw error;
+    }
   },
 
   /**

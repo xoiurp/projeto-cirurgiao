@@ -505,6 +505,66 @@ export class VideosService {
   }
 
   /**
+   * Criar vídeo com URL de upload TUS direto para o frontend
+   * O backend gera uma URL TUS autenticada, e o frontend faz o upload diretamente
+   * IMPORTANTE: Esta é a solução para arquivos grandes (sem limite de tamanho!)
+   */
+  async createVideoWithTusUpload(
+    moduleId: string,
+    metadata: { title: string; description?: string; order: number; fileSize: number; filename: string },
+  ): Promise<{ tusUploadUrl: string; uid: string; videoId: string; video: Video }> {
+    try {
+      this.logger.log(`Creating video with TUS upload URL for module: ${moduleId}`);
+      this.logger.log(`File: ${metadata.filename} (${(metadata.fileSize / 1024 / 1024).toFixed(2)} MB)`);
+
+      // Verificar se o módulo existe
+      const module = await this.prisma.module.findUnique({
+        where: { id: moduleId },
+      });
+
+      if (!module) {
+        throw new NotFoundException('Módulo não encontrado');
+      }
+
+      // Obter URL de upload TUS do Cloudflare
+      const { tusUploadUrl, uid } = await this.cloudflareStream.getTusUploadUrl(
+        metadata.fileSize,
+        metadata.filename,
+        { name: metadata.title },
+      );
+      this.logger.log(`TUS upload URL obtained. Cloudflare UID: ${uid}`);
+
+      // Criar registro do vídeo no banco com status UPLOADING
+      const video = await this.prisma.video.create({
+        data: {
+          title: metadata.title,
+          description: metadata.description,
+          order: metadata.order,
+          cloudflareId: uid,
+          uploadStatus: 'UPLOADING',
+          uploadProgress: 0,
+          isPublished: false,
+          module: {
+            connect: { id: moduleId },
+          },
+        },
+      });
+
+      this.logger.log(`Video record created: ${video.id} with cloudflareId: ${uid}`);
+
+      return {
+        tusUploadUrl,
+        uid,
+        videoId: video.id,
+        video,
+      };
+    } catch (error) {
+      this.logger.error('Error creating video with TUS upload', error);
+      throw error;
+    }
+  }
+
+  /**
    * Listar todos os vídeos de um módulo
    */
   async findAll(moduleId: string): Promise<Video[]> {

@@ -84,6 +84,28 @@ export class VideosController {
   }
 
   /**
+   * Novo endpoint para upload TUS direto do frontend para Cloudflare (arquivos grandes)
+   * O backend gera uma URL TUS autenticada, e o frontend faz upload direto para Cloudflare
+   * SEM PASSAR PELO BACKEND - ideal para arquivos de qualquer tamanho!
+   */
+  @Post('modules/:moduleId/videos/tus-upload-url')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async getTusUploadUrlWithVideo(
+    @Param('moduleId') moduleId: string,
+    @Body() metadata: { title: string; description?: string; order: number; fileSize: number; filename: string },
+    @Request() req,
+  ) {
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+    
+    if (!metadata.fileSize || !metadata.filename) {
+      throw new BadRequestException('fileSize e filename são obrigatórios');
+    }
+    
+    return this.videosService.createVideoWithTusUpload(moduleId, metadata);
+  }
+
+  /**
    * Upload de arquivo de vídeo (assíncrono)
    * O arquivo é salvo no disco e o upload para Cloudflare acontece em background
    * Retorna imediatamente com status "processing"

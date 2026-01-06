@@ -421,4 +421,84 @@ export class CloudflareStreamService {
       );
     }
   }
+
+  /**
+   * Obter URL de upload TUS direto para o frontend
+   * Usa o TUS protocol com Cloudflare API - gera URL autenticada
+   * O frontend pode usar esta URL para fazer upload TUS resumível diretamente
+   * 
+   * Documentação: https://developers.cloudflare.com/stream/uploading-videos/upload-video-file/#resumable-uploads-with-tus-for-large-files
+   */
+  async getTusUploadUrl(
+    fileSize: number,
+    filename: string,
+    metadata?: { name?: string },
+  ): Promise<{ tusUploadUrl: string; uid: string }> {
+    try {
+      this.logger.log(`Requesting TUS upload URL for file: ${filename} (${fileSize} bytes)`);
+      
+      const apiToken = this.configService.get<string>('CLOUDFLARE_API_TOKEN');
+      
+      // Criar upload TUS inicial com POST para obter a URL de upload
+      // O Cloudflare retorna um Location header com a URL onde continuar o upload
+      const response = await axios.post(
+        `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/stream?direct_user=true`,
+        null, // Body vazio para criação TUS
+        {
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            'Tus-Resumable': '1.0.0',
+            'Upload-Length': fileSize.toString(),
+            'Upload-Metadata': this.encodeTusMetadata({
+              filename: filename,
+              filetype: 'video/mp4',
+              name: metadata?.name || filename,
+              requiresignedurls: 'false',
+              allowedorigins: '*',
+            }),
+          },
+        },
+      );
+
+      // O Cloudflare retorna status 201 e Location header com a URL de upload
+      const tusUploadUrl = response.headers['location'] || response.headers['Location'];
+      
+      if (!tusUploadUrl) {
+        this.logger.error('No Location header in Cloudflare TUS response');
+        this.logger.error(`Response headers: ${JSON.stringify(response.headers)}`);
+        throw new BadRequestException('Failed to get TUS upload URL from Cloudflare');
+      }
+
+      // Extrair UID da URL
+      const uid = tusUploadUrl.split('/').pop()?.split('?')[0];
+      
+      if (!uid) {
+        throw new BadRequestException('Failed to extract UID from TUS upload URL');
+      }
+
+      this.logger.log(`TUS upload URL obtained: ${tusUploadUrl}`);
+      this.logger.log(`Video UID: ${uid}`);
+
+      return {
+        tusUploadUrl,
+        uid,
+      };
+    } catch (error: any) {
+      this.logger.error('Error getting TUS upload URL', error?.response?.data || error.message);
+      this.logger.error(`Error details: ${JSON.stringify(error?.response?.headers || {})}`);
+      
+      throw new BadRequestException(
+        `Failed to get TUS upload URL: ${error?.response?.data?.errors?.[0]?.message || error.message}`
+      );
+    }
+  }
+
+  /**
+   * Codifica metadata para o formato TUS (base64)
+   */
+  private encodeTusMetadata(metadata: Record<string, string>): string {
+    return Object.entries(metadata)
+      .map(([key, value]) => `${key} ${Buffer.from(value).toString('base64')}`)
+      .join(',');
+  }
 }
