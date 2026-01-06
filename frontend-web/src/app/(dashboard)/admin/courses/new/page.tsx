@@ -31,7 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 const courseSchema = z.object({
   title: z.string().min(3, 'O título deve ter no mínimo 3 caracteres'),
   description: z.string().optional(),
-  price: z.coerce.number().min(0, 'O preço deve ser maior ou igual a 0').default(0),
+  price: z.number().min(0, 'O preço deve ser maior ou igual a 0'),
   thumbnailUrl: z.string().url('URL inválida').optional().or(z.literal('')),
 });
 
