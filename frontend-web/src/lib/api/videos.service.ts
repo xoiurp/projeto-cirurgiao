@@ -207,9 +207,9 @@ export const videosService = {
   },
 
   /**
-   * Upload de vídeo direto para Cloudflare via HTTP (Direct Creator Upload)
-   * O arquivo é enviado diretamente do navegador para o Cloudflare, sem passar pelo backend
-   * A URL de Direct Upload do Cloudflare aceita upload HTTP simples (FormData)
+   * Upload de vídeo via backend usando XMLHttpRequest (sem timeout)
+   * O backend recebe o arquivo e faz upload TUS para Cloudflare em background
+   * XMLHttpRequest não tem timeout padrão, permitindo uploads muito grandes
    */
   async uploadVideoTusDirect(
     moduleId: string,
@@ -218,74 +218,90 @@ export const videosService = {
     onProgress?: (progress: number) => void,
     onStatusChange?: (status: 'preparing' | 'uploading' | 'processing' | 'done' | 'error', message?: string) => void
   ): Promise<Video> {
-    try {
-      // Fase 1: Obter URL de upload direto do backend (cria o registro no banco)
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+    
+    return new Promise((resolve, reject) => {
       onStatusChange?.('preparing', 'Preparando upload...');
-      const { uploadURL, uid, videoId, video } = await this.getDirectUploadUrl(moduleId, metadata);
+      console.log('[Backend Upload] Starting upload via backend');
+      console.log('[Backend Upload] File size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
       
-      console.log('[Direct Upload] Upload URL obtained:', { uploadURL, uid, videoId });
-      
-      // Fase 2: Upload HTTP direto para Cloudflare (Direct Creator Upload)
-      // A URL do Direct Upload aceita FormData com o arquivo
-      onStatusChange?.('uploading', 'Enviando para Cloudflare...');
-      
-      return new Promise((resolve, reject) => {
-        const formData = new FormData();
-        formData.append('file', file);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', metadata.title);
+      if (metadata.description) {
+        formData.append('description', metadata.description);
+      }
+      formData.append('order', metadata.order.toString());
 
-        const xhr = new XMLHttpRequest();
-        
-        // Configurar evento de progresso
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable) {
-            const percentage = (event.loaded / event.total) * 100;
-            console.log(`[Direct Upload] Progress: ${percentage.toFixed(2)}%`);
-            onProgress?.(percentage);
+      const xhr = new XMLHttpRequest();
+      
+      // Evento de progresso do upload
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          // Mapear progresso HTTP (0-100%) para fase 1 (0-50%)
+          // O backend faz TUS em background (fase 2: 50-100%)
+          const httpProgress = (event.loaded / event.total) * 100;
+          const mappedProgress = httpProgress * 0.5; // 0-50%
+          console.log(`[Backend Upload] HTTP Progress: ${httpProgress.toFixed(2)}% -> Mapped: ${mappedProgress.toFixed(2)}%`);
+          onProgress?.(mappedProgress);
+          
+          if (httpProgress >= 100) {
+            onStatusChange?.('processing', 'Arquivo recebido! Backend processando...');
           }
-        });
-        
-        // Configurar evento de conclusão
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            console.log('[Direct Upload] Upload completed successfully');
-            onStatusChange?.('processing', 'Upload concluído! Processando...');
-            
-            resolve({
-              ...video,
-              uploadStatus: 'PROCESSING' as const,
-              uploadProgress: 100,
-            });
-          } else {
-            console.error('[Direct Upload] Upload failed:', xhr.status, xhr.responseText);
-            onStatusChange?.('error', `Erro HTTP ${xhr.status}`);
-            reject(new Error(`Erro no upload: HTTP ${xhr.status} - ${xhr.responseText}`));
-          }
-        });
-        
-        // Configurar evento de erro
-        xhr.addEventListener('error', () => {
-          console.error('[Direct Upload] Network error');
-          onStatusChange?.('error', 'Erro de rede');
-          reject(new Error('Erro de rede ao fazer upload'));
-        });
-        
-        // Configurar evento de abort
-        xhr.addEventListener('abort', () => {
-          console.log('[Direct Upload] Upload aborted');
-          onStatusChange?.('error', 'Upload cancelado');
-          reject(new Error('Upload cancelado'));
-        });
-        
-        // Iniciar upload
-        console.log('[Direct Upload] Starting upload to:', uploadURL);
-        xhr.open('POST', uploadURL);
-        xhr.send(formData);
+        }
       });
-    } catch (error: any) {
-      console.error('[Direct Upload] Error:', error);
-      onStatusChange?.('error', error.message);
-      throw error;
-    }
+      
+      // Evento de conclusão
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const video = JSON.parse(xhr.responseText) as Video;
+            console.log('[Backend Upload] Upload completed. Video ID:', video.id);
+            onStatusChange?.('processing', 'Upload concluído! Cloudflare processando...');
+            onProgress?.(50); // 50% - Backend recebeu, agora é TUS em background
+            resolve(video);
+          } catch (e) {
+            console.error('[Backend Upload] Failed to parse response');
+            reject(new Error('Erro ao processar resposta do servidor'));
+          }
+        } else {
+          console.error('[Backend Upload] Failed:', xhr.status, xhr.responseText);
+          let errorMsg = 'Erro no upload';
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            errorMsg = errorData.message || errorMsg;
+          } catch (e) {}
+          onStatusChange?.('error', errorMsg);
+          reject(new Error(errorMsg));
+        }
+      });
+      
+      // Evento de erro de rede
+      xhr.addEventListener('error', () => {
+        console.error('[Backend Upload] Network error');
+        onStatusChange?.('error', 'Erro de rede. Verifique sua conexão.');
+        reject(new Error('Erro de rede. Verifique sua conexão e tente novamente.'));
+      });
+      
+      // Evento de abort
+      xhr.addEventListener('abort', () => {
+        console.log('[Backend Upload] Aborted');
+        onStatusChange?.('error', 'Upload cancelado');
+        reject(new Error('Upload cancelado'));
+      });
+      
+      // Configurar e enviar requisição
+      // IMPORTANTE: XMLHttpRequest não tem timeout padrão (infinito)
+      const token = localStorage.getItem('accessToken');
+      xhr.open('POST', `${API_BASE_URL}/modules/${moduleId}/videos/upload-file`);
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      
+      onStatusChange?.('uploading', 'Enviando para servidor...');
+      console.log('[Backend Upload] Sending to:', `${API_BASE_URL}/modules/${moduleId}/videos/upload-file`);
+      xhr.send(formData);
+    });
   },
 
   /**
