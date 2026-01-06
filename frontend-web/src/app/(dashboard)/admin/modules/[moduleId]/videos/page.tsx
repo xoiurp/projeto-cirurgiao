@@ -322,8 +322,6 @@ export default function ModuleVideosPage() {
       return;
     }
 
-    let pollingInterval: NodeJS.Timeout | null = null;
-
     try {
       setIsUploading(true);
       setUploadProgress(0);
@@ -332,8 +330,8 @@ export default function ModuleVideosPage() {
       // Obter próxima ordem
       const { nextOrder } = await videosService.getNextOrder(moduleId);
 
-      // Fazer upload do vídeo (Fase 1: 0-50%)
-      const video = await videosService.uploadFile(
+      // NOVO: Upload TUS direto para Cloudflare (sem passar pelo backend)
+      const video = await videosService.uploadVideoTusDirect(
         moduleId,
         selectedFile,
         {
@@ -341,72 +339,55 @@ export default function ModuleVideosPage() {
           description: videoDescription || undefined,
           order: nextOrder,
         },
-        (httpProgress) => {
-          // Mapear progresso HTTP para 0-50%
-          const mappedProgress = Math.round(httpProgress * 0.5);
-          setUploadProgress(mappedProgress);
+        // Callback de progresso
+        (progress) => {
+          setUploadProgress(Math.round(progress));
+        },
+        // Callback de status
+        (status, message) => {
+          console.log(`[Upload] Status: ${status} - ${message}`);
+          if (status === 'preparing') {
+            setUploadPhase('uploading');
+          } else if (status === 'uploading') {
+            setUploadPhase('uploading');
+          } else if (status === 'processing') {
+            setUploadPhase('processing');
+          }
         }
       );
 
-      // Fase 2: Monitorar progresso TUS (50-100%)
-      setUploadPhase('processing');
-      setUploadProgress(50);
+      // Upload TUS concluído com sucesso!
+      setUploadProgress(100);
+      setUploadPhase('done');
+      
+      toast({
+        title: 'Upload concluído!',
+        description: 'O vídeo está sendo processado pelo Cloudflare. Você pode fechar esta janela.',
+      });
 
-      // Iniciar polling para pegar progresso TUS do backend
-      pollingInterval = setInterval(async () => {
-        try {
-          const status = await videosService.getUploadStatus(video.id);
-          
-          // Mapear progresso TUS (0-100%) para 50-100% da barra
-          const tusProgress = status.uploadProgress || 0;
-          const mappedProgress = 50 + Math.round(tusProgress * 0.5);
-          setUploadProgress(mappedProgress);
+      // Resetar estado e fechar modal após um breve delay
+      setTimeout(() => {
+        setIsUploadModalOpen(false);
+        setSelectedFile(null);
+        setVideoTitle('');
+        setVideoDescription('');
+        setUploadProgress(0);
+        setUploadPhase('idle');
+        setIsUploading(false);
+      }, 1500);
 
-          // Se completou ou deu erro, parar polling
-          if (status.uploadStatus === 'PROCESSING' || status.uploadStatus === 'READY' || status.uploadStatus === 'ERROR') {
-            if (pollingInterval) {
-              clearInterval(pollingInterval);
-              pollingInterval = null;
-            }
+      // Recarregar lista de vídeos
+      await loadVideos();
 
-            if (status.uploadStatus === 'PROCESSING' || status.uploadStatus === 'READY') {
-              setUploadProgress(100);
-              toast({
-                title: 'Upload concluído!',
-                description: 'O vídeo está sendo processado pelo Cloudflare.',
-              });
-            }
-
-            // Resetar estado e fechar modal
-            setIsUploadModalOpen(false);
-            setSelectedFile(null);
-            setVideoTitle('');
-            setVideoDescription('');
-            setUploadProgress(0);
-            setUploadPhase('idle');
-            setIsUploading(false);
-
-            // Recarregar lista de vídeos
-            await loadVideos();
-          }
-        } catch (error) {
-          console.error('Erro ao verificar progresso:', error);
-        }
-      }, 1000); // Verificar a cada 1 segundo
-
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao fazer upload:', error);
       toast({
-        title: 'Erro',
-        description: 'Não foi possível fazer o upload do vídeo.',
+        title: 'Erro no upload',
+        description: error.message || 'Não foi possível fazer o upload do vídeo.',
         variant: 'destructive',
       });
       setUploadPhase('idle');
       setIsUploading(false);
-      
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
     }
   };
 

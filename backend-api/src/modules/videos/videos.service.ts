@@ -450,6 +450,61 @@ export class VideosService {
   }
 
   /**
+   * Criar vídeo com URL de upload direto para TUS do frontend
+   * Cria o registro no banco e retorna a URL de upload direta do Cloudflare
+   * O frontend faz o upload TUS diretamente para o Cloudflare
+   */
+  async createVideoWithDirectUpload(
+    moduleId: string,
+    metadata: { title: string; description?: string; order: number },
+  ): Promise<{ uploadURL: string; uid: string; videoId: string; video: Video }> {
+    try {
+      this.logger.log(`Creating video with direct upload URL for module: ${moduleId}`);
+
+      // Verificar se o módulo existe
+      const module = await this.prisma.module.findUnique({
+        where: { id: moduleId },
+      });
+
+      if (!module) {
+        throw new NotFoundException('Módulo não encontrado');
+      }
+
+      // Obter URL de upload direto do Cloudflare
+      const { uploadURL, uid } = await this.cloudflareStream.getDirectUploadUrl();
+      this.logger.log(`Direct upload URL obtained. Cloudflare UID: ${uid}`);
+
+      // Criar registro do vídeo no banco com status UPLOADING
+      const video = await this.prisma.video.create({
+        data: {
+          title: metadata.title,
+          description: metadata.description,
+          order: metadata.order,
+          cloudflareId: uid, // Já sabemos o UID que o Cloudflare vai usar
+          uploadStatus: 'UPLOADING',
+          uploadProgress: 0,
+          isPublished: false,
+          module: {
+            connect: { id: moduleId },
+          },
+        },
+      });
+
+      this.logger.log(`Video record created: ${video.id} with cloudflareId: ${uid}`);
+
+      return {
+        uploadURL,
+        uid,
+        videoId: video.id,
+        video,
+      };
+    } catch (error) {
+      this.logger.error('Error creating video with direct upload', error);
+      throw error;
+    }
+  }
+
+  /**
    * Listar todos os vídeos de um módulo
    */
   async findAll(moduleId: string): Promise<Video[]> {

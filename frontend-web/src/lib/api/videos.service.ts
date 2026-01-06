@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import * as tus from 'tus-js-client';
 import type {
   Video,
   CreateVideoDto,
@@ -6,6 +7,14 @@ import type {
   ReorderVideosDto,
   UploadUrlResponse,
 } from '../types/course.types';
+
+// Interface para resposta do upload direto
+export interface DirectUploadResponse {
+  uploadURL: string;
+  uid: string;
+  videoId: string;
+  video: Video;
+}
 
 // Interface para status de upload
 export interface UploadStatusResponse {
@@ -180,6 +189,87 @@ export const videosService = {
   async getUploadStatus(id: string): Promise<UploadStatusResponse> {
     const response = await apiClient.get<UploadStatusResponse>(`/videos/${id}/upload-status`);
     return response.data;
+  },
+
+  /**
+   * Obter URL de upload direto para TUS
+   * Cria o registro do vídeo no banco e retorna a URL de upload direta do Cloudflare
+   */
+  async getDirectUploadUrl(
+    moduleId: string,
+    metadata: { title: string; description?: string; order: number }
+  ): Promise<DirectUploadResponse> {
+    const response = await apiClient.post<DirectUploadResponse>(
+      `/modules/${moduleId}/videos/upload-url-direct`,
+      metadata
+    );
+    return response.data;
+  },
+
+  /**
+   * Upload de vídeo via TUS diretamente para Cloudflare
+   * O arquivo é enviado diretamente do navegador para o Cloudflare, sem passar pelo backend
+   * Suporta arquivos grandes com upload resumível
+   */
+  async uploadVideoTusDirect(
+    moduleId: string,
+    file: File,
+    metadata: { title: string; description?: string; order: number },
+    onProgress?: (progress: number) => void,
+    onStatusChange?: (status: 'preparing' | 'uploading' | 'processing' | 'done' | 'error', message?: string) => void
+  ): Promise<Video> {
+    try {
+      // Fase 1: Obter URL de upload direto do backend (cria o registro no banco)
+      onStatusChange?.('preparing', 'Preparando upload...');
+      const { uploadURL, uid, videoId, video } = await this.getDirectUploadUrl(moduleId, metadata);
+      
+      console.log('[TUS Direct] Upload URL obtained:', { uploadURL, uid, videoId });
+      
+      // Fase 2: Upload TUS diretamente para Cloudflare
+      onStatusChange?.('uploading', 'Enviando para Cloudflare...');
+      
+      return new Promise((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: uploadURL, // URL direta do Cloudflare, NÃO do backend!
+          chunkSize: 50 * 1024 * 1024, // 50MB chunks (recomendado pelo Cloudflare)
+          retryDelays: [0, 3000, 5000, 10000, 20000], // Retry em caso de falha
+          metadata: {
+            filename: file.name,
+            filetype: file.type || 'video/mp4',
+            name: metadata.title,
+          },
+          onError: (error) => {
+            console.error('[TUS Direct] Upload error:', error);
+            onStatusChange?.('error', error.message);
+            reject(new Error(`Erro no upload TUS: ${error.message}`));
+          },
+          onProgress: (bytesUploaded, bytesTotal) => {
+            const percentage = (bytesUploaded / bytesTotal) * 100;
+            console.log(`[TUS Direct] Progress: ${percentage.toFixed(2)}%`);
+            onProgress?.(percentage);
+          },
+          onSuccess: () => {
+            console.log('[TUS Direct] Upload completed successfully');
+            onStatusChange?.('processing', 'Upload concluído! Processando...');
+            
+            // Retornar o vídeo criado (o status será atualizado pelo polling)
+            resolve({
+              ...video,
+              uploadStatus: 'PROCESSING' as const,
+              uploadProgress: 100,
+            });
+          },
+        });
+
+        // Iniciar upload
+        console.log('[TUS Direct] Starting upload...');
+        upload.start();
+      });
+    } catch (error: any) {
+      console.error('[TUS Direct] Error:', error);
+      onStatusChange?.('error', error.message);
+      throw error;
+    }
   },
 
   /**

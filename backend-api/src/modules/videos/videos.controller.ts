@@ -68,6 +68,22 @@ export class VideosController {
   }
 
   /**
+   * Novo endpoint para upload TUS direto do frontend para Cloudflare
+   * Cria o registro do vídeo no banco e retorna a URL de upload direta
+   */
+  @Post('modules/:moduleId/videos/upload-url-direct')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async getDirectUploadUrlWithVideo(
+    @Param('moduleId') moduleId: string,
+    @Body() metadata: { title: string; description?: string; order: number },
+    @Request() req,
+  ) {
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+    return this.videosService.createVideoWithDirectUpload(moduleId, metadata);
+  }
+
+  /**
    * Upload de arquivo de vídeo (assíncrono)
    * O arquivo é salvo no disco e o upload para Cloudflare acontece em background
    * Retorna imediatamente com status "processing"
