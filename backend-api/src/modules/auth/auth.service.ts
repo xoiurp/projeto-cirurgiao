@@ -1,14 +1,17 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { Role } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -50,20 +53,30 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
+    this.logger.log(`Tentativa de login para: ${loginDto.email}`);
+
     const user = await this.prisma.user.findUnique({
       where: { email: loginDto.email },
     });
 
-    if (!user || !user.isActive) {
+    if (!user) {
+      this.logger.warn(`Login falhou: Usuário não encontrado - ${loginDto.email}`);
+      throw new UnauthorizedException('Credenciais inválidas');
+    }
+
+    if (!user.isActive) {
+      this.logger.warn(`Login falhou: Usuário inativo - ${loginDto.email}`);
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
     const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
 
     if (!isPasswordValid) {
+      this.logger.warn(`Login falhou: Senha incorreta - ${loginDto.email}`);
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
+    this.logger.log(`Login bem sucedido para: ${loginDto.email}`);
     const tokens = await this.generateTokens(user.id, user.email, user.role);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
 
@@ -141,6 +154,26 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    this.logger.log(`Solicitação de recuperação de senha para: ${forgotPasswordDto.email}`);
+    
+    const user = await this.prisma.user.findUnique({
+      where: { email: forgotPasswordDto.email },
+    });
+
+    if (!user) {
+      // Por segurança, não informamos se o usuário existe ou não
+      this.logger.warn(`Recuperação de senha: Usuário não encontrado - ${forgotPasswordDto.email}`);
+      return { message: 'Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha.' };
+    }
+
+    // TODO: Implementar envio de email real
+    // Por enquanto, apenas logamos que a funcionalidade foi acionada
+    this.logger.warn(`Recuperação de senha solicitada para ${user.email}, mas serviço de email não está configurado.`);
+    
+    return { message: 'Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha.' };
   }
 
   private async generateTokens(userId: string, email: string, role: Role) {

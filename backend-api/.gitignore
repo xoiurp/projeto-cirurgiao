@@ -44,3 +44,7 @@ lerna-debug.log*
 # Prisma
 prisma/migrations/*
 !prisma/migrations/.gitkeep
+
+# Firebase Service Account Key (NUNCA commitar!)
+firebase-service-account.json
+*-service-account*.json

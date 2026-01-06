@@ -1,0 +1,195 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  ForbiddenException,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  Query,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { VideosService } from './videos.service';
+import { CoursesService } from '../courses/courses.service';
+import { ModulesService } from '../modules/modules.service';
+import { CreateVideoDto } from './dto/create-video.dto';
+import { UpdateVideoDto } from './dto/update-video.dto';
+import { ReorderVideosDto } from './dto/reorder-videos.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
+
+@Controller()
+@UseGuards(JwtAuthGuard)
+export class VideosController {
+  constructor(
+    private readonly videosService: VideosService,
+    private readonly modulesService: ModulesService,
+    private readonly coursesService: CoursesService,
+  ) {}
+
+  private async checkInstructorPermission(moduleId: string, userId: string, userRole: Role) {
+    if (userRole === Role.ADMIN) return;
+    
+    const module = await this.modulesService.findOne(moduleId);
+    const isInstructor = await this.coursesService.isInstructor(module.courseId, userId);
+    
+    if (!isInstructor) {
+      throw new ForbiddenException('Você não tem permissão para gerenciar vídeos deste curso');
+    }
+  }
+
+  @Post('modules/:moduleId/videos')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async create(
+    @Param('moduleId') moduleId: string,
+    @Body() createVideoDto: CreateVideoDto,
+    @Request() req,
+  ) {
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+    return this.videosService.create(moduleId, createVideoDto);
+  }
+
+  @Post('videos/upload-url')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  getUploadUrl() {
+    return this.videosService.getDirectUploadUrl();
+  }
+
+  /**
+   * Upload de arquivo de vídeo (assíncrono)
+   * O arquivo é salvo no disco e o upload para Cloudflare acontece em background
+   * Retorna imediatamente com status "processing"
+   */
+  @Post('modules/:moduleId/videos/upload-file')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(null, `video-${uniqueSuffix}${extname(file.originalname)}`);
+        },
+      }),
+      limits: {
+        fileSize: 50 * 1024 * 1024 * 1024, // 50GB max
+      },
+    }),
+  )
+  async uploadFile(
+    @Param('moduleId') moduleId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() metadata: { title: string; description?: string; order: string },
+    @Request() req,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Arquivo não fornecido');
+    }
+
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+
+    // Inicia o upload assíncrono e retorna imediatamente
+    return this.videosService.uploadFromDiskAsync(moduleId, file.path, file.originalname, {
+      title: metadata.title,
+      description: metadata.description,
+      order: parseInt(metadata.order, 10),
+    });
+  }
+
+  /**
+   * Verificar status de upload de um vídeo
+   */
+  @Get('videos/:id/upload-status')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async getUploadStatus(@Param('id') id: string, @Request() req) {
+    const video = await this.videosService.findOne(id);
+    await this.checkInstructorPermission(video.moduleId, req.user.sub, req.user.role);
+    return this.videosService.getUploadStatus(id);
+  }
+
+  @Get('modules/:moduleId/videos')
+  findAll(@Param('moduleId') moduleId: string) {
+    return this.videosService.findAll(moduleId);
+  }
+
+  @Get('modules/:moduleId/videos/next-order')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async getNextOrder(@Param('moduleId') moduleId: string, @Request() req) {
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+    const nextOrder = await this.videosService.getNextOrder(moduleId);
+    return { nextOrder };
+  }
+
+  @Patch('modules/:moduleId/videos/reorder')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async reorder(
+    @Param('moduleId') moduleId: string,
+    @Body() reorderDto: ReorderVideosDto,
+    @Request() req,
+  ) {
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+    return this.videosService.reorder(moduleId, reorderDto);
+  }
+
+  @Get('videos/:id')
+  findOne(@Param('id') id: string) {
+    return this.videosService.findOne(id);
+  }
+
+  @Patch('videos/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async update(
+    @Param('id') id: string,
+    @Body() updateVideoDto: UpdateVideoDto,
+    @Request() req,
+  ) {
+    const video = await this.videosService.findOne(id);
+    await this.checkInstructorPermission(video.moduleId, req.user.sub, req.user.role);
+    return this.videosService.update(id, updateVideoDto);
+  }
+
+  @Delete('videos/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async remove(@Param('id') id: string, @Request() req) {
+    const video = await this.videosService.findOne(id);
+    await this.checkInstructorPermission(video.moduleId, req.user.sub, req.user.role);
+    await this.videosService.remove(id);
+    return { message: 'Vídeo deletado com sucesso' };
+  }
+
+  @Patch('videos/:id/toggle-publish')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async togglePublish(@Param('id') id: string, @Request() req) {
+    const video = await this.videosService.findOne(id);
+    await this.checkInstructorPermission(video.moduleId, req.user.sub, req.user.role);
+    return this.videosService.togglePublish(id);
+  }
+
+  @Post('videos/:id/sync')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async sync(@Param('id') id: string, @Request() req) {
+    const video = await this.videosService.findOne(id);
+    await this.checkInstructorPermission(video.moduleId, req.user.sub, req.user.role);
+    return this.videosService.syncWithCloudflare(id);
+  }
+}

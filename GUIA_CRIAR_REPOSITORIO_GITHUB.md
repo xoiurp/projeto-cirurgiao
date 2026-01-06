@@ -200,7 +200,7 @@ git commit -m "Initial commit: Projeto Cirurgião - iOS, Android e Web"
 
 ```bash
 # Adicionar repositório remoto (substitua pela SUA URL)
-git remote add origin https://github.com/seu-usuario/projeto-cirurgiao.git
+git remote add origin https://github.com/xoiurp/projeto-cirurgiao.git
 
 # Verificar
 git remote -v

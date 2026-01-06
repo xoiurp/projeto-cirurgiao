@@ -1,0 +1,162 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  ForbiddenException,
+} from '@nestjs/common';
+import { ModulesService } from './modules.service';
+import { CoursesService } from '../courses/courses.service';
+import { CreateModuleDto } from './dto/create-module.dto';
+import { UpdateModuleDto } from './dto/update-module.dto';
+import { ReorderModulesDto } from './dto/reorder-modules.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
+
+@Controller()
+@UseGuards(JwtAuthGuard)
+export class ModulesController {
+  constructor(
+    private readonly modulesService: ModulesService,
+    private readonly coursesService: CoursesService,
+  ) {}
+
+  /**
+   * Criar novo módulo em um curso (apenas instrutor do curso ou ADMIN)
+   */
+  @Post('courses/:courseId/modules')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async create(
+    @Param('courseId') courseId: string,
+    @Body() createModuleDto: CreateModuleDto,
+    @Request() req,
+  ) {
+    // Verificar se o usuário é o instrutor do curso ou ADMIN
+    if (req.user.role !== Role.ADMIN) {
+      const isInstructor = await this.coursesService.isInstructor(courseId, req.user.sub);
+      if (!isInstructor) {
+        throw new ForbiddenException('Você não tem permissão para adicionar módulos a este curso');
+      }
+    }
+
+    return this.modulesService.create(courseId, createModuleDto);
+  }
+
+  /**
+   * Listar todos os módulos de um curso
+   */
+  @Get('courses/:courseId/modules')
+  findAll(@Param('courseId') courseId: string) {
+    return this.modulesService.findAll(courseId);
+  }
+
+  /**
+   * Obter próximo número de ordem disponível
+   */
+  @Get('courses/:courseId/modules/next-order')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async getNextOrder(@Param('courseId') courseId: string, @Request() req) {
+    // Verificar se o usuário é o instrutor do curso ou ADMIN
+    if (req.user.role !== Role.ADMIN) {
+      const isInstructor = await this.coursesService.isInstructor(courseId, req.user.sub);
+      if (!isInstructor) {
+        throw new ForbiddenException('Você não tem permissão para acessar este recurso');
+      }
+    }
+
+    const nextOrder = await this.modulesService.getNextOrder(courseId);
+    return { nextOrder };
+  }
+
+  /**
+   * Reordenar módulos de um curso
+   */
+  @Patch('courses/:courseId/modules/reorder')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async reorder(
+    @Param('courseId') courseId: string,
+    @Body() reorderDto: ReorderModulesDto,
+    @Request() req,
+  ) {
+    // Verificar se o usuário é o instrutor do curso ou ADMIN
+    if (req.user.role !== Role.ADMIN) {
+      const isInstructor = await this.coursesService.isInstructor(courseId, req.user.sub);
+      if (!isInstructor) {
+        throw new ForbiddenException('Você não tem permissão para reordenar módulos deste curso');
+      }
+    }
+
+    return this.modulesService.reorder(courseId, reorderDto);
+  }
+
+  /**
+   * Buscar módulo por ID
+   */
+  @Get('modules/:id')
+  findOne(@Param('id') id: string) {
+    return this.modulesService.findOne(id);
+  }
+
+  /**
+   * Atualizar módulo (apenas instrutor do curso ou ADMIN)
+   */
+  @Patch('modules/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async update(
+    @Param('id') id: string,
+    @Body() updateModuleDto: UpdateModuleDto,
+    @Request() req,
+  ) {
+    // Buscar o módulo para obter o courseId
+    const module = await this.modulesService.findOne(id);
+
+    // Verificar se o usuário é o instrutor do curso ou ADMIN
+    if (req.user.role !== Role.ADMIN) {
+      const isInstructor = await this.coursesService.isInstructor(
+        module.courseId,
+        req.user.sub,
+      );
+      if (!isInstructor) {
+        throw new ForbiddenException('Você não tem permissão para editar este módulo');
+      }
+    }
+
+    return this.modulesService.update(id, updateModuleDto);
+  }
+
+  /**
+   * Deletar módulo (apenas instrutor do curso ou ADMIN)
+   */
+  @Delete('modules/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async remove(@Param('id') id: string, @Request() req) {
+    // Buscar o módulo para obter o courseId
+    const module = await this.modulesService.findOne(id);
+
+    // Verificar se o usuário é o instrutor do curso ou ADMIN
+    if (req.user.role !== Role.ADMIN) {
+      const isInstructor = await this.coursesService.isInstructor(
+        module.courseId,
+        req.user.sub,
+      );
+      if (!isInstructor) {
+        throw new ForbiddenException('Você não tem permissão para deletar este módulo');
+      }
+    }
+
+    await this.modulesService.remove(id);
+    return { message: 'Módulo deletado com sucesso' };
+  }
+}
