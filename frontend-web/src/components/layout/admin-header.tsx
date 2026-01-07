@@ -50,7 +50,6 @@ export function AdminHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.photoURL || undefined} />
                   <AvatarFallback className="bg-[rgb(var(--primary-500))] text-white text-xs">
                     {user?.name?.charAt(0).toUpperCase() || 'A'}
                   </AvatarFallback>
