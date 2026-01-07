@@ -14,20 +14,31 @@ import { Users, BookOpen, Clock, TrendingUp, PlayCircle, GraduationCap } from 'l
  */
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, hasHydrated, isLoading } = useAuthStore();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Aguarda a hidratação e o carregamento antes de verificar autenticação
+    if (hasHydrated && !isLoading && !isAuthenticated) {
+      console.log('🔴 [Dashboard] Usuário não autenticado, redirecionando para login');
       router.push('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [hasHydrated, isLoading, isAuthenticated, router]);
 
-  if (!user) {
+  // Aguarda hidratação e carregamento antes de renderizar
+  if (!hasHydrated || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Carregando...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(var(--primary-500))] mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
+        </div>
       </div>
     );
+  }
+
+  // Se não estiver autenticado após hidratação, não renderiza nada (o useEffect vai redirecionar)
+  if (!isAuthenticated || !user) {
+    return null;
   }
 
   return (

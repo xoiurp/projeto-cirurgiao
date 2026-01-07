@@ -7,7 +7,9 @@
       "Bash(npx shadcn@latest:*)",
       "Bash(npm run build:*)",
       "Bash(node:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Implementa Dashboard do Administrador estilo Coursera\n\n- Cria AdminSidebar com navegação fixa \\(240px\\)\n- Cria AdminHeader com busca, notificações e perfil\n- Cria StatCard reutilizável com trends e variantes de cor\n- Implementa dashboard principal com:\n  - 4 cards de estatísticas \\(alunos, cursos, horas, conclusão\\)\n  - Feed de atividades recentes\n  - Tabela de cursos mais acessados com progresso visual\n  - Placeholder para gráfico de matrículas\n- Adiciona componentes shadcn/ui: dropdown-menu, avatar\n- Corrige ESLint config para evitar erro de iteração\n- Remove propriedade photoURL inexistente do User type\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)"
     ]
   },
   "enableAllProjectMcpServers": true,
