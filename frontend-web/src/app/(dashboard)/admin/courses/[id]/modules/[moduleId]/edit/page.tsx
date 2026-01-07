@@ -415,30 +415,44 @@ export default function EditModulePage() {
 
   // Carregar dados do módulo
   useEffect(() => {
+    let isMounted = true;
+    
     const loadModule = async () => {
       try {
         setIsLoading(true);
         const data = await modulesService.findOne(moduleId);
-        setModule(data);
-        form.reset({
-          title: data.title,
-          description: data.description || '',
-        });
+        
+        if (isMounted) {
+          setModule(data);
+          form.reset({
+            title: data.title,
+            description: data.description || '',
+          });
+        }
       } catch (error) {
         console.error('Erro ao carregar módulo:', error);
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar o módulo.',
-          variant: 'destructive',
-        });
-        router.push(`/admin/courses/${courseId}/edit`);
+        if (isMounted) {
+          toast({
+            title: 'Erro',
+            description: 'Não foi possível carregar o módulo.',
+            variant: 'destructive',
+          });
+          router.push(`/admin/courses/${courseId}/edit`);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadModule();
-  }, [moduleId, courseId, form, toast, router]);
+    
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moduleId, courseId]);
 
   // Carregar vídeos do módulo
   const loadVideos = useCallback(async () => {
