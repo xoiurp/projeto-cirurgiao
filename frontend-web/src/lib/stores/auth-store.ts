@@ -128,15 +128,40 @@ export const useAuthStore = create<AuthStore>()(
       /**
        * Carrega dados do usuário autenticado
        */
-      loadUser: async () => {
-        console.log('🔍 [Auth] loadUser() iniciado');
-        const accessToken = localStorage.getItem('accessToken');
-        
-        if (!accessToken) {
-          console.log('❌ [Auth] Sem token no localStorage');
-          set({ isAuthenticated: false, user: null, isLoading: false });
-          return;
-        }
+  loadUser: async () => {
+    // Modo de desenvolvimento: desabilitar autenticação
+    const disableAuth = process.env.NEXT_PUBLIC_DISABLE_AUTH === 'true';
+    
+    if (disableAuth) {
+      console.log('🔓 [loadUser] Modo DEV: Autenticação desabilitada');
+      const mockUser: User = {
+        id: 'dev-user-id',
+        email: 'dev@localhost',
+        name: 'Dev User',
+        role: 'ADMIN',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      set({ 
+        user: mockUser, 
+        isAuthenticated: true,
+        accessToken: 'dev-token',
+        refreshToken: 'dev-refresh-token',
+      });
+      localStorage.setItem('accessToken', 'dev-token');
+      localStorage.setItem('refreshToken', 'dev-refresh-token');
+      localStorage.setItem('user', JSON.stringify(mockUser));
+      return;
+    }
+
+    const accessToken = localStorage.getItem('accessToken');
+    console.log('📥 [loadUser] Token do localStorage:', accessToken ? 'Presente' : 'Ausente');
+
+    if (!accessToken) {
+      console.log('❌ [loadUser] Sem token, removendo usuário');
+      set({ user: null, isAuthenticated: false });
+      return;
+    }
 
         console.log('✅ [Auth] Token encontrado, validando com API...');
         set({ isLoading: true });
@@ -147,7 +172,7 @@ export const useAuthStore = create<AuthStore>()(
           
           set({
             user,
-            accessToken,
+            accessToken: accessToken,
             refreshToken: localStorage.getItem('refreshToken'),
             isAuthenticated: true,
             isLoading: false,

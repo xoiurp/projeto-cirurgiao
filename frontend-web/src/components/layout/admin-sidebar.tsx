@@ -22,32 +22,32 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     title: 'Dashboard',
-    href: '/dashboard',
+    href: '/admin',
     icon: Home,
   },
   {
     title: 'Cursos',
-    href: '/dashboard/courses',
+    href: '/admin/courses',
     icon: BookOpen,
   },
   {
     title: 'Alunos',
-    href: '/dashboard/students',
+    href: '/admin/students',
     icon: Users,
   },
   {
     title: 'Módulos',
-    href: '/dashboard/modules',
+    href: '/admin/modules',
     icon: Folders,
   },
   {
     title: 'Vídeos',
-    href: '/dashboard/videos',
+    href: '/admin/videos',
     icon: Video,
   },
   {
     title: 'Configurações',
-    href: '/dashboard/settings',
+    href: '/admin/settings',
     icon: Settings,
   },
 ];
@@ -59,7 +59,7 @@ export function AdminSidebar() {
     <aside className="fixed left-0 top-0 z-40 h-screen w-60 border-r border-[rgb(var(--border))] bg-white dark:bg-gray-900">
       {/* Logo */}
       <div className="flex h-16 items-center border-b border-[rgb(var(--border))] px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/admin" className="flex items-center gap-2">
           <GraduationCap className="h-8 w-8 text-[rgb(var(--primary-500))]" />
           <div className="flex flex-col">
             <span className="text-sm font-bold text-gray-900 dark:text-white">
