@@ -59,6 +59,25 @@ export const videosService = {
   },
 
   /**
+   * Criar vídeo a partir de embed externo (YouTube, Vimeo, etc)
+   * Apenas salva a URL - não faz upload para Cloudflare
+   * @param moduleId ID do módulo
+   * @param embedUrl URL do embed (YouTube, Vimeo, ou outro)
+   * @param metadata Título, descrição, ordem e fonte
+   */
+  async createFromEmbed(
+    moduleId: string,
+    embedUrl: string,
+    metadata: { title: string; description?: string; order: number; videoSource?: 'youtube' | 'vimeo' | 'external' }
+  ): Promise<Video> {
+    const response = await apiClient.post<Video>(`/modules/${moduleId}/videos/from-embed`, {
+      embedUrl,
+      ...metadata,
+    });
+    return response.data;
+  },
+
+  /**
    * Listar vídeos de um módulo
    */
   async findAll(moduleId: string): Promise<Video[]> {

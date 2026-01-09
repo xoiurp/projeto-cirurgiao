@@ -180,11 +180,12 @@ function VideoUploadDialog({
   onUploadComplete: (video: Video) => void;
 }) {
   const { toast } = useToast();
-  const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
+  const [uploadMode, setUploadMode] = useState<'file' | 'url' | 'embed'>('file');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [embedUrl, setEmbedUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
@@ -331,31 +332,46 @@ function VideoUploadDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Toggle entre Upload e URL */}
-          <div className="flex gap-2 p-1 bg-muted rounded-lg">
+          {/* Toggle entre Upload, URL e Embed */}
+          <div className="flex gap-1 p-1 bg-muted rounded-lg">
             <Button
               variant={uploadMode === 'file' ? 'default' : 'ghost'}
-              className="flex-1"
+              className="flex-1 text-xs px-2"
               onClick={() => {
                 setUploadMode('file');
+                setVideoUrl('');
+                setEmbedUrl('');
+              }}
+              disabled={isUploading}
+            >
+              <Upload className="mr-1 h-3 w-3" />
+              Upload
+            </Button>
+            <Button
+              variant={uploadMode === 'url' ? 'default' : 'ghost'}
+              className="flex-1 text-xs px-2"
+              onClick={() => {
+                setUploadMode('url');
+                setFile(null);
+                setEmbedUrl('');
+              }}
+              disabled={isUploading}
+            >
+              <Link2 className="mr-1 h-3 w-3" />
+              URL Direta
+            </Button>
+            <Button
+              variant={uploadMode === 'embed' ? 'default' : 'ghost'}
+              className="flex-1 text-xs px-2"
+              onClick={() => {
+                setUploadMode('embed');
+                setFile(null);
                 setVideoUrl('');
               }}
               disabled={isUploading}
             >
-              <Upload className="mr-2 h-4 w-4" />
-              Upload de Arquivo
-            </Button>
-            <Button
-              variant={uploadMode === 'url' ? 'default' : 'ghost'}
-              className="flex-1"
-              onClick={() => {
-                setUploadMode('url');
-                setFile(null);
-              }}
-              disabled={isUploading}
-            >
-              <Link2 className="mr-2 h-4 w-4" />
-              URL Externa
+              <VideoIcon className="mr-1 h-3 w-3" />
+              Embed
             </Button>
           </div>
 
@@ -541,6 +557,130 @@ function VideoUploadDialog({
                     <>
                       <Link2 className="mr-2 h-4 w-4" />
                       Adicionar da URL
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {/* Modo: Embed Externo */}
+          {uploadMode === 'embed' && (
+            <>
+              {/* URL do Embed */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">URL do Embed *</label>
+                <Input
+                  placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
+                  value={embedUrl}
+                  onChange={(e) => setEmbedUrl(e.target.value)}
+                  disabled={isUploading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cole a URL do YouTube, Vimeo ou outra plataforma de vídeo
+                </p>
+              </div>
+
+              {/* Título */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Título *</label>
+                <Input
+                  placeholder="Ex: Aula 01 - Introdução"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={isUploading}
+                />
+              </div>
+
+              {/* Descrição */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Descrição (opcional)</label>
+                <Textarea
+                  placeholder="Descreva o conteúdo do vídeo..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  disabled={isUploading}
+                  rows={3}
+                />
+              </div>
+
+              {/* Info box */}
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <strong>ℹ️ Sobre Embed:</strong> O vídeo será exibido diretamente da plataforma original (YouTube, Vimeo, etc).
+                  Não será hospedado no Cloudflare.
+                </p>
+              </div>
+
+              {/* Loading */}
+              {isUploading && (
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Salvando vídeo embed...</span>
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => handleClose(false)}
+                  disabled={isUploading}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={async () => {
+                    if (!embedUrl.trim() || !title.trim()) {
+                      toast({
+                        title: 'Erro',
+                        description: 'Preencha a URL do embed e o título',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    if (!embedUrl.startsWith('http://') && !embedUrl.startsWith('https://')) {
+                      toast({
+                        title: 'URL inválida',
+                        description: 'A URL deve começar com http:// ou https://',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    try {
+                      setIsUploading(true);
+                      const video = await videosService.createFromEmbed(moduleId, embedUrl, {
+                        title: title.trim(),
+                        description: description.trim() || undefined,
+                        order: nextOrder,
+                      });
+                      toast({
+                        title: 'Vídeo adicionado!',
+                        description: 'O vídeo embed foi salvo com sucesso.',
+                      });
+                      onUploadComplete(video);
+                      handleClose(false);
+                    } catch (error: any) {
+                      console.error('Erro ao criar vídeo embed:', error);
+                      toast({
+                        title: 'Erro',
+                        description: error.message || 'Não foi possível criar o vídeo embed.',
+                        variant: 'destructive',
+                      });
+                    } finally {
+                      setIsUploading(false);
+                    }
+                  }} 
+                  disabled={!embedUrl.trim() || !title.trim() || isUploading}
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <VideoIcon className="mr-2 h-4 w-4" />
+                      Adicionar Embed
                     </>
                   )}
                 </Button>
