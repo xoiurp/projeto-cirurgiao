@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { AdminSidebar } from '@/components/layout/admin-sidebar';
-import { AdminHeader } from '@/components/layout/admin-header';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, BookOpen, Clock, TrendingUp, PlayCircle, GraduationCap, Loader2 } from 'lucide-react';
@@ -31,7 +29,7 @@ interface RecentActivity {
  */
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, hasHydrated, isLoading } = useAuthStore();
+  const { user } = useAuthStore();
   
   // Estados para dados reais
   const [courses, setCourses] = useState<Course[]>([]);
@@ -43,26 +41,10 @@ export default function AdminDashboardPage() {
     completionRate: 0,
   });
 
+  // Carregar dados ao montar o componente
   useEffect(() => {
-    // Aguarda a hidratação e o carregamento antes de verificar autenticação
-    if (hasHydrated && !isLoading && !isAuthenticated) {
-      console.log('🔴 [Admin Dashboard] Usuário não autenticado, redirecionando para login');
-      router.push('/login');
-    }
-    
-    // Verificar se é admin
-    if (hasHydrated && !isLoading && isAuthenticated && user?.role !== 'ADMIN') {
-      console.log('🔴 [Admin Dashboard] Usuário não é admin, redirecionando');
-      router.push('/student/my-courses');
-    }
-  }, [hasHydrated, isLoading, isAuthenticated, user, router]);
-
-  // Carregar dados reais
-  useEffect(() => {
-    if (hasHydrated && isAuthenticated && user?.role === 'ADMIN') {
-      loadDashboardData();
-    }
-  }, [hasHydrated, isAuthenticated, user]);
+    loadDashboardData();
+  }, []);
 
   const loadDashboardData = async () => {
     try {
@@ -102,23 +84,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Aguarda hidratação e carregamento antes de renderizar
-  if (!hasHydrated || isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(var(--primary-500))] mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Se não estiver autenticado após hidratação, não renderiza nada (o useEffect vai redirecionar)
-  if (!isAuthenticated || !user) {
-    return null;
-  }
-
   // Atividades recentes (mock por enquanto - TODO: implementar com dados reais)
   const recentActivities: RecentActivity[] = [
     {
@@ -154,19 +119,14 @@ export default function AdminDashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <AdminSidebar />
-      <AdminHeader />
-
-      {/* Main Content */}
-      <main className="ml-60 mt-16 p-8">
-        {/* Page Title */}
-        <div className="mb-8">
+    <>
+      {/* Page Title */}
+      <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             Dashboard
           </h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Bem-vindo de volta, {user.name}! Aqui está um resumo da sua plataforma.
+            Bem-vindo de volta, {user?.name}! Aqui está um resumo da sua plataforma.
           </p>
         </div>
 
@@ -347,7 +307,6 @@ export default function AdminDashboardPage() {
             )}
           </CardContent>
         </Card>
-      </main>
-    </div>
+    </>
   );
 }
