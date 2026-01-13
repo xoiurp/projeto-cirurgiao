@@ -34,7 +34,7 @@ export function LoginForm() {
     setError(null);
 
     try {
-      await login(data);
+      await login(data.email, data.password);
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Erro ao fazer login. Verifique suas credenciais.');
