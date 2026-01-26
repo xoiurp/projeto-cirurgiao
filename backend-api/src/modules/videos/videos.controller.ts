@@ -23,13 +23,13 @@ import { ModulesService } from '../modules/modules.service';
 import { CreateVideoDto } from './dto/create-video.dto';
 import { UpdateVideoDto } from './dto/update-video.dto';
 import { ReorderVideosDto } from './dto/reorder-videos.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../firebase/guards/firebase-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
 @Controller()
-@UseGuards(JwtAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 export class VideosController {
   constructor(
     private readonly videosService: VideosService,
@@ -81,6 +81,73 @@ export class VideosController {
   ) {
     await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
     return this.videosService.createVideoWithDirectUpload(moduleId, metadata);
+  }
+
+  /**
+   * Criar vídeo a partir de URL externa
+   * O Cloudflare irá baixar e processar o vídeo automaticamente
+   * Ideal para URLs de vídeos hospedados em outros serviços (links diretos .mp4)
+   */
+  @Post('modules/:moduleId/videos/from-url')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async createFromUrl(
+    @Param('moduleId') moduleId: string,
+    @Body() data: { url: string; title: string; description?: string; order: number },
+    @Request() req,
+  ) {
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+    
+    if (!data.url || !data.url.startsWith('http')) {
+      throw new BadRequestException('URL válida é obrigatória');
+    }
+    
+    if (!data.title) {
+      throw new BadRequestException('Título é obrigatório');
+    }
+    
+    return this.videosService.uploadFromUrl(moduleId, data.url, {
+      title: data.title,
+      description: data.description,
+      order: data.order,
+    });
+  }
+
+  /**
+   * Criar vídeo a partir de embed externo (YouTube, Vimeo, etc)
+   * Apenas salva a URL - não faz upload para Cloudflare
+   * O player renderiza um iframe com o embed
+   */
+  @Post('modules/:moduleId/videos/from-embed')
+  @UseGuards(RolesGuard)
+  @Roles(Role.INSTRUCTOR, Role.ADMIN)
+  async createFromEmbed(
+    @Param('moduleId') moduleId: string,
+    @Body() data: { 
+      embedUrl: string; 
+      title: string; 
+      description?: string; 
+      order: number;
+      videoSource?: 'youtube' | 'vimeo' | 'external';
+    },
+    @Request() req,
+  ) {
+    await this.checkInstructorPermission(moduleId, req.user.sub, req.user.role);
+    
+    if (!data.embedUrl || !data.embedUrl.startsWith('http')) {
+      throw new BadRequestException('URL de embed válida é obrigatória');
+    }
+    
+    if (!data.title) {
+      throw new BadRequestException('Título é obrigatório');
+    }
+    
+    return this.videosService.createFromEmbed(moduleId, data.embedUrl, {
+      title: data.title,
+      description: data.description,
+      order: data.order,
+      videoSource: data.videoSource,
+    });
   }
 
   /**

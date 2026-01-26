@@ -1,0 +1,89 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
+
+@Injectable()
+export class UploadService {
+  private readonly logger = new Logger(UploadService.name);
+  private readonly s3Client: S3Client;
+  private readonly bucketName: string;
+  private readonly publicUrl: string;
+
+  constructor(private configService: ConfigService) {
+    const accountId = this.configService.get('CLOUDFLARE_ACCOUNT_ID');
+    const accessKeyId = this.configService.get('CLOUDFLARE_R2_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY');
+    const endpoint = this.configService.get('CLOUDFLARE_R2_ENDPOINT');
+    const publicUrl = this.configService.get('CLOUDFLARE_R2_PUBLIC_URL');
+    this.bucketName = this.configService.get('CLOUDFLARE_R2_BUCKET');
+
+    // Log para debug
+    this.logger.log('Cloudflare R2 Configuration:');
+    this.logger.log(`Account ID: ${accountId ? '✓' : '✗'}`);
+    this.logger.log(`Access Key ID: ${accessKeyId ? '✓' : '✗'}`);
+    this.logger.log(`Secret Access Key: ${secretAccessKey ? '✓' : '✗'}`);
+    this.logger.log(`Endpoint: ${endpoint || 'NOT SET'}`);
+    this.logger.log(`Bucket: ${this.bucketName || 'NOT SET'}`);
+    this.logger.log(`Public URL: ${publicUrl || 'NOT SET'}`);
+
+    // Validar credenciais
+    if (!accessKeyId || !secretAccessKey) {
+      this.logger.error('❌ ERRO: Credenciais do Cloudflare R2 não configuradas!');
+      this.logger.error('Configure CLOUDFLARE_R2_ACCESS_KEY_ID e CLOUDFLARE_R2_SECRET_ACCESS_KEY no arquivo .env');
+      throw new Error('Cloudflare R2 credentials not configured');
+    }
+
+    // Validar URL pública
+    if (!publicUrl) {
+      this.logger.error('❌ ERRO: CLOUDFLARE_R2_PUBLIC_URL não configurada!');
+      this.logger.error('Configure CLOUDFLARE_R2_PUBLIC_URL no arquivo .env com a URL pública do seu bucket R2');
+      throw new Error('Cloudflare R2 public URL not configured');
+    }
+
+    // URL pública do R2 (vem do .env)
+    this.publicUrl = publicUrl;
+
+    this.s3Client = new S3Client({
+      region: 'auto',
+      endpoint: endpoint,
+      credentials: {
+        accessKeyId: accessKeyId,
+        secretAccessKey: secretAccessKey,
+      },
+    });
+
+    this.logger.log('✅ Cloudflare R2 client initialized successfully');
+  }
+
+  async uploadToR2(
+    file: Express.Multer.File,
+    folder: string = 'uploads',
+  ): Promise<string> {
+    try {
+      // Gerar nome único para o arquivo
+      const fileExtension = file.originalname.split('.').pop();
+      const fileName = `${folder}/${randomUUID()}.${fileExtension}`;
+
+      // Upload para R2
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: fileName,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      });
+
+      await this.s3Client.send(command);
+
+      // Retornar URL pública
+      const url = `${this.publicUrl}/${fileName}`;
+      
+      this.logger.log(`File uploaded successfully: ${url}`);
+      
+      return url;
+    } catch (error) {
+      this.logger.error('Error uploading file to R2', error);
+      throw error;
+    }
+  }
+}

@@ -106,6 +106,75 @@ export class VideosService {
   }
 
   /**
+   * Criar vídeo a partir de embed externo (YouTube, Vimeo, etc)
+   * Não faz upload para Cloudflare - apenas salva a URL de embed
+   */
+  async createFromEmbed(
+    moduleId: string, 
+    embedUrl: string, 
+    metadata: { 
+      title: string; 
+      description?: string; 
+      order: number; 
+      videoSource?: 'youtube' | 'vimeo' | 'external';
+    }
+  ): Promise<Video> {
+    try {
+      // Verificar se o módulo existe
+      const module = await this.prisma.module.findUnique({
+        where: { id: moduleId },
+      });
+
+      if (!module) {
+        throw new NotFoundException('Módulo não encontrado');
+      }
+
+      // Detectar automaticamente a fonte do vídeo se não especificada
+      let videoSource = metadata.videoSource || 'external';
+      if (!metadata.videoSource) {
+        if (embedUrl.includes('youtube.com') || embedUrl.includes('youtu.be')) {
+          videoSource = 'youtube';
+        } else if (embedUrl.includes('vimeo.com')) {
+          videoSource = 'vimeo';
+        }
+      }
+
+      // Criar registro no banco com status READY (já é um link válido)
+      const video = await this.prisma.video.create({
+        data: {
+          title: metadata.title,
+          description: metadata.description,
+          order: metadata.order,
+          externalUrl: embedUrl,
+          videoSource: videoSource,
+          uploadStatus: 'READY',
+          uploadProgress: 100,
+          isPublished: false,
+          module: {
+            connect: { id: moduleId },
+          },
+        },
+        include: {
+          module: {
+            select: {
+              id: true,
+              title: true,
+              courseId: true,
+            },
+          },
+        },
+      });
+
+      this.logger.log(`Embed video created: ${video.id} - Source: ${videoSource}`);
+
+      return video;
+    } catch (error) {
+      this.logger.error('Error creating embed video', error);
+      throw error;
+    }
+  }
+
+  /**
    * Upload de vídeo para Cloudflare Stream via URL
    */
   async uploadFromUrl(moduleId: string, url: string, metadata: { title: string; description?: string; order: number }): Promise<Video> {

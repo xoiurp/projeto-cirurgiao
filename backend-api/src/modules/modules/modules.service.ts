@@ -198,32 +198,52 @@ export class ModulesService {
    * Reordenar módulos de um curso
    */
   async reorder(courseId: string, reorderDto: ReorderModulesDto): Promise<Module[]> {
+    this.logger.log(`[REORDER] Iniciando reordenação para curso: ${courseId}`);
+    this.logger.log(`[REORDER] Payload recebido: ${JSON.stringify(reorderDto)}`);
+    
     // Verificar se o curso existe
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
     });
 
     if (!course) {
+      this.logger.error(`[REORDER] Curso não encontrado: ${courseId}`);
       throw new NotFoundException('Curso não encontrado');
     }
 
-    try {
-      // Atualizar a ordem de cada módulo
-      await Promise.all(
-        reorderDto.modules.map((item) =>
-          this.prisma.module.update({
-            where: { id: item.id },
-            data: { order: item.order },
-          }),
-        ),
-      );
+    this.logger.log(`[REORDER] Curso encontrado: ${course.title}`);
 
-      this.logger.log(`Modules reordered for course ${courseId}`);
+    try {
+      this.logger.log(`[REORDER] Atualizando ${reorderDto.modules.length} módulos...`);
+      
+      // SOLUÇÃO: Primeiro, atribuir valores temporários negativos para evitar conflito de constraint
+      // Isso permite que todos os módulos fiquem com valores únicos temporariamente
+      this.logger.log(`[REORDER] Passo 1: Atribuindo valores temporários...`);
+      for (let i = 0; i < reorderDto.modules.length; i++) {
+        const item = reorderDto.modules[i];
+        await this.prisma.module.update({
+          where: { id: item.id },
+          data: { order: -(i + 1) }, // Valores negativos temporários: -1, -2, -3, etc
+        });
+      }
+      
+      // Agora, atualizar para os valores finais
+      this.logger.log(`[REORDER] Passo 2: Atribuindo valores finais...`);
+      for (const item of reorderDto.modules) {
+        this.logger.log(`[REORDER] Atualizando módulo ${item.id} para ordem ${item.order}`);
+        await this.prisma.module.update({
+          where: { id: item.id },
+          data: { order: item.order },
+        });
+      }
+
+      this.logger.log(`[REORDER] Módulos reordenados com sucesso para curso ${courseId}`);
 
       // Retornar os módulos atualizados
       return this.findAll(courseId);
     } catch (error) {
-      this.logger.error(`Error reordering modules for course ${courseId}`, error);
+      this.logger.error(`[REORDER] ERRO ao reordenar módulos para curso ${courseId}:`, error);
+      this.logger.error(`[REORDER] Stack trace:`, error.stack);
       throw new BadRequestException('Erro ao reordenar módulos');
     }
   }

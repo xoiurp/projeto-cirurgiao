@@ -92,6 +92,10 @@ export class ProgressService {
         });
 
         this.logger.log(`Progress updated for user ${userId}, video ${videoId}`);
+        
+        // Atualizar progresso da matrícula
+        await this.updateEnrollmentProgress(userId, courseId);
+        
         return progress;
       } else {
         // Criar novo progresso
@@ -108,6 +112,10 @@ export class ProgressService {
         });
 
         this.logger.log(`Progress created for user ${userId}, video ${videoId}`);
+        
+        // Atualizar progresso da matrícula
+        await this.updateEnrollmentProgress(userId, courseId);
+        
         return progress;
       }
     } catch (error) {
@@ -205,7 +213,7 @@ export class ProgressService {
     const watchedVideos = videos.filter((v) => v.watched).length;
     const completedVideos = videos.filter((v) => v.completed).length;
     const totalWatchTime = videos.reduce((sum, v) => sum + v.watchTime, 0);
-    const progressPercentage = totalVideos > 0 ? Math.round((completedVideos / totalVideos) * 100) : 0;
+    const progressPercentage = totalVideos > 0 ? Math.round((watchedVideos / totalVideos) * 100) : 0;
 
     return {
       courseId,
@@ -284,16 +292,16 @@ export class ProgressService {
 
       if (allVideoIds.length === 0) return;
 
-      // Contar vídeos concluídos
-      const completedCount = await this.prisma.progress.count({
+      // Contar vídeos assistidos (watched)
+      const watchedCount = await this.prisma.progress.count({
         where: {
           userId,
           videoId: { in: allVideoIds },
-          completed: true,
+          watched: true,
         },
       });
 
-      const progressPercentage = Math.round((completedCount / allVideoIds.length) * 100);
+      const progressPercentage = Math.round((watchedCount / allVideoIds.length) * 100);
 
       // Atualizar matrícula
       await this.prisma.enrollment.updateMany({
@@ -507,7 +515,16 @@ export class ProgressService {
       where: { userId },
       include: {
         course: {
-          include: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            description: true,
+            thumbnail: true,
+            thumbnailVertical: true,
+            thumbnailHorizontal: true,
+            isPublished: true,
+            price: true,
             modules: {
               include: {
                 videos: {
@@ -557,7 +574,7 @@ export class ProgressService {
       }
 
       const progressPercentage = totalVideos > 0 
-        ? Math.round((completedVideos / totalVideos) * 100) 
+        ? Math.round((watchedVideos / totalVideos) * 100) 
         : 0;
 
       return {
@@ -566,6 +583,8 @@ export class ProgressService {
         slug: course.slug,
         description: course.description,
         thumbnail: course.thumbnail,
+        thumbnailVertical: course.thumbnailVertical,
+        thumbnailHorizontal: course.thumbnailHorizontal,
         isPublished: course.isPublished,
         price: course.price,
         instructor: course.instructor,

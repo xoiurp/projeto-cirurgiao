@@ -10,6 +10,18 @@ export class CreateModuleDto {
   @IsOptional()
   description?: string;
 
+  @IsString()
+  @IsOptional()
+  thumbnail?: string;
+
+  @IsString()
+  @IsOptional()
+  thumbnailVertical?: string;
+
+  @IsString()
+  @IsOptional()
+  thumbnailHorizontal?: string;
+
   @IsInt()
   @Type(() => Number)
   @Min(0)

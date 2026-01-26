@@ -10,11 +10,11 @@ import {
 } from '@nestjs/common';
 import { ProgressService } from './progress.service';
 import { SaveProgressDto } from './dto/save-progress.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../firebase/guards/firebase-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @Controller('progress')
-@UseGuards(JwtAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 export class ProgressController {
   constructor(private readonly progressService: ProgressService) {}
 
@@ -25,7 +25,7 @@ export class ProgressController {
   @Post()
   @HttpCode(HttpStatus.OK)
   async saveProgress(
-    @GetUser('userId') userId: string,
+    @GetUser('id') userId: string,
     @Body() saveProgressDto: SaveProgressDto,
   ) {
     return this.progressService.saveProgress(userId, saveProgressDto);
@@ -37,7 +37,7 @@ export class ProgressController {
    */
   @Get('video/:videoId')
   async getVideoProgress(
-    @GetUser('userId') userId: string,
+    @GetUser('id') userId: string,
     @Param('videoId') videoId: string,
   ) {
     const progress = await this.progressService.getVideoProgress(userId, videoId);
@@ -50,7 +50,7 @@ export class ProgressController {
    */
   @Get('course/:courseId')
   async getCourseProgress(
-    @GetUser('userId') userId: string,
+    @GetUser('id') userId: string,
     @Param('courseId') courseId: string,
   ) {
     return this.progressService.getCourseProgress(userId, courseId);
@@ -63,7 +63,7 @@ export class ProgressController {
   @Post('video/:videoId/complete')
   @HttpCode(HttpStatus.OK)
   async markAsCompleted(
-    @GetUser('userId') userId: string,
+    @GetUser('id') userId: string,
     @Param('videoId') videoId: string,
   ) {
     return this.progressService.markAsCompleted(userId, videoId);
@@ -76,7 +76,7 @@ export class ProgressController {
   @Post('video/:videoId/incomplete')
   @HttpCode(HttpStatus.OK)
   async markAsIncomplete(
-    @GetUser('userId') userId: string,
+    @GetUser('id') userId: string,
     @Param('videoId') videoId: string,
   ) {
     return this.progressService.markAsIncomplete(userId, videoId);
@@ -87,7 +87,7 @@ export class ProgressController {
    * Obter resumo de progresso do usuário em todos os cursos
    */
   @Get('summary')
-  async getUserProgressSummary(@GetUser('userId') userId: string) {
+  async getUserProgressSummary(@GetUser('id') userId: string) {
     return this.progressService.getUserProgressSummary(userId);
   }
 
@@ -96,7 +96,7 @@ export class ProgressController {
    * Buscar cursos em que o usuário está matriculado
    */
   @Get('enrolled-courses')
-  async getEnrolledCourses(@GetUser('userId') userId: string) {
+  async getEnrolledCourses(@GetUser('id') userId: string) {
     return this.progressService.getEnrolledCourses(userId);
   }
 }

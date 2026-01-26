@@ -9,6 +9,13 @@ import { ModulesModule } from './modules/modules/modules.module';
 import { VideosModule } from './modules/videos/videos.module';
 import { ProgressModule } from './modules/progress/progress.module';
 import { FirebaseModule } from './modules/firebase/firebase.module';
+import { UploadModule } from './modules/upload/upload.module';
+import { LikesModule } from './modules/likes/likes.module';
+import { MaterialsModule } from './modules/materials/materials.module';
+import { NotesModule } from './modules/notes/notes.module';
+import { TranscriptsModule } from './modules/transcripts/transcripts.module';
+import { ForumCategoriesModule } from './modules/forum-categories/forum-categories.module';
+import { ForumModule } from './modules/forum/forum.module';
 
 @Module({
   imports: [
@@ -25,6 +32,13 @@ import { FirebaseModule } from './modules/firebase/firebase.module';
     ModulesModule,
     VideosModule,
     ProgressModule,
+    UploadModule,
+    LikesModule,
+    MaterialsModule,
+    NotesModule,
+    TranscriptsModule,
+    ForumCategoriesModule,
+    ForumModule,
   ],
 })
 export class AppModule {}

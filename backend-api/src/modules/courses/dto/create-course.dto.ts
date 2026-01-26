@@ -12,7 +12,15 @@ export class CreateCourseDto {
 
   @IsString()
   @IsOptional()
-  thumbnail?: string;
+  thumbnail?: string; // Deprecated - mantido para compatibilidade
+
+  @IsString()
+  @IsOptional()
+  thumbnailVertical?: string; // Thumbnail vertical (9:16) - ideal para mobile
+
+  @IsString()
+  @IsOptional()
+  thumbnailHorizontal?: string; // Thumbnail horizontal (16:9) - ideal para desktop
 
   @IsNumber()
   @Type(() => Number)

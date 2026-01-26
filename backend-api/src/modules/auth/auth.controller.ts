@@ -5,7 +5,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { FirebaseLoginDto } from './dto/firebase-login.dto';
+import { FirebaseAuthGuard } from '../firebase/guards/firebase-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
 
 @ApiTags('auth')
@@ -30,6 +31,15 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  @Post('firebase-login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login com Firebase' })
+  @ApiResponse({ status: 200, description: 'Login Firebase realizado com sucesso' })
+  @ApiResponse({ status: 401, description: 'Token Firebase inválido' })
+  async firebaseLogin(@Body() firebaseLoginDto: FirebaseLoginDto) {
+    return this.authService.firebaseLogin(firebaseLoginDto);
+  }
+
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar tokens' })
@@ -48,7 +58,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Fazer logout' })
@@ -58,7 +68,7 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obter perfil do usuário autenticado' })
   @ApiResponse({ status: 200, description: 'Perfil retornado com sucesso' })

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsBoolean, Min, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, IsBoolean, Min, IsEnum, IsUrl } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // Enum local até rodar a migration do Prisma
@@ -8,6 +8,14 @@ export enum VideoUploadStatus {
   PROCESSING = 'PROCESSING',
   READY = 'READY',
   ERROR = 'ERROR',
+}
+
+// Enum para fonte do vídeo
+export enum VideoSource {
+  CLOUDFLARE = 'cloudflare',
+  YOUTUBE = 'youtube',
+  VIMEO = 'vimeo',
+  EXTERNAL = 'external',
 }
 
 export class CreateVideoDto {
@@ -63,4 +71,12 @@ export class CreateVideoDto {
   @IsString()
   @IsOptional()
   tempFilePath?: string;
+
+  @IsString()
+  @IsOptional()
+  externalUrl?: string;
+
+  @IsEnum(VideoSource)
+  @IsOptional()
+  videoSource?: VideoSource;
 }

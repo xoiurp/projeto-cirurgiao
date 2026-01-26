@@ -6,7 +6,9 @@ import { PrismaService } from '../../shared/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { FirebaseLoginDto } from './dto/firebase-login.dto';
 import { Role } from '@prisma/client';
+import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +18,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private firebaseAdmin: FirebaseAdminService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -174,6 +177,61 @@ export class AuthService {
     this.logger.warn(`Recuperação de senha solicitada para ${user.email}, mas serviço de email não está configurado.`);
     
     return { message: 'Se o email estiver cadastrado, você receberá as instruções para redefinir sua senha.' };
+  }
+
+  /**
+   * Login com Firebase Authentication
+   * Verifica o token Firebase e sincroniza com o banco PostgreSQL
+   */
+  async firebaseLogin(firebaseLoginDto: FirebaseLoginDto) {
+    this.logger.log('Tentativa de login via Firebase');
+
+    // Verifica o token Firebase
+    const decodedToken = await this.firebaseAdmin.verifyIdToken(firebaseLoginDto.firebaseToken);
+    
+    if (!decodedToken) {
+      throw new UnauthorizedException('Token Firebase inválido');
+    }
+
+    this.logger.log(`Token Firebase válido para: ${decodedToken.email}`);
+
+    // Busca ou cria o usuário no PostgreSQL
+    let user = await this.prisma.user.findUnique({
+      where: { email: decodedToken.email },
+    });
+
+    if (!user) {
+      // Criar novo usuário
+      this.logger.log(`Criando novo usuário no banco: ${decodedToken.email}`);
+      
+      user = await this.prisma.user.create({
+        data: {
+          email: decodedToken.email,
+          name: decodedToken.name || decodedToken.email.split('@')[0],
+          password: '', // Firebase gerencia a senha
+          role: Role.STUDENT, // Novo usuário sempre começa como STUDENT
+        },
+      });
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('Usuário inativo');
+    }
+
+    this.logger.log(`Login Firebase bem sucedido para: ${user.email}`);
+
+    // Retorna os dados do usuário (sem gerar JWT, usa o token Firebase)
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      firebaseToken: firebaseLoginDto.firebaseToken,
+    };
   }
 
   private async generateTokens(userId: string, email: string, role: Role) {

@@ -35,9 +35,15 @@ model User {
   updatedAt DateTime @updatedAt
 
   refreshTokens     RefreshToken[]
-  coursesInstructor Course[]       @relation("InstructorCourses")
+  coursesInstructor Course[]         @relation("InstructorCourses")
   enrollments       Enrollment[]
   progress          Progress[]
+  videoLikes        VideoLike[]
+  videoNotes        VideoNote[]
+  forumTopics       ForumTopic[]
+  forumReplies      ForumReply[]
+  forumTopicVotes   ForumTopicVote[]
+  forumReplyVotes   ForumReplyVote[]
 
   @@map("users")
 }
@@ -56,21 +62,23 @@ model RefreshToken {
 }
 
 model Course {
-  id           String   @id @default(uuid())
-  title        String
-  slug         String   @unique
-  description  String   @db.Text
-  thumbnail    String?
-  instructorId String
-  isPublished  Boolean  @default(false)
-  price        Decimal  @default(0) @db.Decimal(10, 2)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  title               String
+  slug                String   @unique
+  description         String   @db.Text
+  thumbnail           String?  // Deprecated - use thumbnailHorizontal
+  thumbnailVertical   String?  // Thumbnail para exibição vertical (9:16)
+  thumbnailHorizontal String?  // Thumbnail para exibição horizontal (16:9)
+  instructorId        String
+  isPublished         Boolean  @default(false)
+  price               Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   instructor  User         @relation("InstructorCourses", fields: [instructorId], references: [id], onDelete: Cascade)
   modules     Module[]
   enrollments Enrollment[]
-
+  forumTopics ForumTopic[]
 
   @@index([instructorId])
   @@index([slug])
@@ -78,13 +86,16 @@ model Course {
 }
 
 model Module {
-  id          String   @id @default(uuid())
-  title       String
-  description String?  @db.Text
-  order       Int
-  courseId    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  title               String
+  description         String?  @db.Text
+  thumbnail           String?  // Deprecated - use thumbnailHorizontal
+  thumbnailVertical   String?  // Thumbnail para exibição vertical (9:16)
+  thumbnailHorizontal String?  // Thumbnail para exibição horizontal (16:9)
+  order               Int
+  courseId            String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   course Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   videos Video[]
@@ -109,11 +120,18 @@ model Video {
   uploadProgress  Int               @default(0)
   uploadError     String?
   tempFilePath    String?
+  externalUrl     String?           // URL de embed (YouTube, Vimeo, etc)
+  videoSource     String            @default("cloudflare") // "cloudflare" | "youtube" | "vimeo" | "external"
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  module   Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  progress Progress[]
+  module      Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress    Progress[]
+  likes       VideoLike[]
+  notes       VideoNote[]
+  transcript  VideoTranscript?
+  materials   VideoMaterial[]
+  forumTopics ForumTopic[]
 
   @@unique([moduleId, order])
   @@index([moduleId])
@@ -158,4 +176,196 @@ model Progress {
   @@index([userId])
   @@index([videoId])
   @@map("video_progress")
+}
+
+// ============================================
+// NOVAS FEATURES DO PLAYER DE VÍDEO
+// ============================================
+
+// Sistema de Curtidas (Likes)
+model VideoLike {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, userId])
+  @@index([videoId])
+  @@index([userId])
+  @@map("video_likes")
+}
+
+// Sistema de Notas do Estudante
+model VideoNote {
+  id        String   @id @default(uuid())
+  videoId   String
+  userId    String
+  content   String   @db.Text
+  timestamp Int?     // Segundos do vídeo (opcional)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([videoId, userId])
+  @@index([videoId])
+  @@map("video_notes")
+}
+
+// Sistema de Transcrição
+model VideoTranscript {
+  id        String   @id @default(uuid())
+  videoId   String   @unique
+  language  String   @default("pt-BR")
+  segments  Json     // Array de { startTime, endTime, text }
+  fullText  String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@map("video_transcripts")
+}
+
+// Tipo de Material
+enum MaterialType {
+  PDF
+  LINK
+  ARTICLE
+  VIDEO
+  IMAGE
+}
+
+// Material Relacionado à Aula
+model VideoMaterial {
+  id          String       @id @default(uuid())
+  videoId     String
+  title       String
+  description String?
+  type        MaterialType @default(LINK)
+  url         String       // URL do arquivo ou link externo
+  fileSize    Int?         // Tamanho em bytes (para downloads)
+  order       Int          @default(0)
+  createdAt   DateTime     @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@map("video_materials")
+}
+
+// ============================================
+// FÓRUM DE DISCUSSÃO
+// ============================================
+
+// Categoria de tópicos do fórum
+model ForumCategory {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  icon        String?  // Ícone lucide-react
+  color       String?  // Cor hex para UI
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  topics ForumTopic[]
+
+  @@map("forum_categories")
+}
+
+// Tópico/Pergunta do fórum
+model ForumTopic {
+  id             String   @id @default(uuid())
+  title          String
+  content        String   @db.Text
+  authorId       String
+  categoryId     String
+  courseId       String?
+  videoId        String?
+  isPinned       Boolean  @default(false)
+  isClosed       Boolean  @default(false)
+  isSolved       Boolean  @default(false)
+  views          Int      @default(0)
+  upvotes        Int      @default(0)
+  downvotes      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastActivityAt DateTime @default(now())
+
+  author   User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  category ForumCategory @relation(fields: [categoryId], references: [id])
+  course   Course?       @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  video    Video?        @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  replies  ForumReply[]
+  votes    ForumTopicVote[]
+
+  @@index([categoryId])
+  @@index([courseId])
+  @@index([videoId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([lastActivityAt])
+  @@map("forum_topics")
+}
+
+// Resposta a um tópico do fórum
+model ForumReply {
+  id            String   @id @default(uuid())
+  content       String   @db.Text
+  topicId       String
+  authorId      String
+  parentReplyId String?
+  isSolution    Boolean  @default(false)
+  isEdited      Boolean  @default(false)
+  upvotes       Int      @default(0)
+  downvotes     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  topic        ForumTopic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  author       User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentReply  ForumReply?  @relation("ReplyToReply", fields: [parentReplyId], references: [id], onDelete: Cascade)
+  childReplies ForumReply[] @relation("ReplyToReply")
+  votes        ForumReplyVote[]
+
+  @@index([topicId])
+  @@index([authorId])
+  @@index([parentReplyId])
+  @@index([createdAt])
+  @@map("forum_replies")
+}
+
+// Votos em tópicos do fórum
+model ForumTopicVote {
+  id        String   @id @default(uuid())
+  value     Int      // 1 (upvote) ou -1 (downvote)
+  topicId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  topic ForumTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, userId])
+  @@map("forum_topic_votes")
+}
+
+// Votos em respostas do fórum
+model ForumReplyVote {
+  id        String   @id @default(uuid())
+  value     Int      // 1 (upvote) ou -1 (downvote)
+  replyId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  reply ForumReply @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([replyId, userId])
+  @@map("forum_reply_votes")
 }
