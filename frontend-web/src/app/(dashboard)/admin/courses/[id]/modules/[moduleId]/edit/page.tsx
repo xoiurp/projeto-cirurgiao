@@ -1081,6 +1081,84 @@ export default function EditModulePage() {
                 )}
               />
 
+              <Separator className="my-6" />
+
+              {/* Thumbnails do Módulo */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold mb-1">Thumbnails do Módulo</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Adicione imagens de capa para o módulo em diferentes orientações
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Thumbnail Horizontal */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Thumbnail Horizontal (16:9)</label>
+                    <ThumbnailUpload
+                      value={module?.thumbnailHorizontal || ''}
+                      onChange={async (url) => {
+                        try {
+                          await modulesService.update(moduleId, {
+                            thumbnailHorizontal: url || null,
+                          } as any);
+                          setModule(prev => prev ? {...prev, thumbnailHorizontal: url} : null);
+                          toast({
+                            title: 'Sucesso',
+                            description: 'Thumbnail horizontal atualizada!',
+                          });
+                        } catch (error) {
+                          console.error('Erro:', error);
+                          toast({
+                            title: 'Erro',
+                            description: 'Não foi possível atualizar a thumbnail.',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      aspectRatio="horizontal"
+                      label="Horizontal"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Recomendado: 1920x1080px (16:9)
+                    </p>
+                  </div>
+
+                  {/* Thumbnail Vertical */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Thumbnail Vertical (9:16)</label>
+                    <ThumbnailUpload
+                      value={module?.thumbnailVertical || ''}
+                      onChange={async (url) => {
+                        try {
+                          await modulesService.update(moduleId, {
+                            thumbnailVertical: url || null,
+                          } as any);
+                          setModule(prev => prev ? {...prev, thumbnailVertical: url} : null);
+                          toast({
+                            title: 'Sucesso',
+                            description: 'Thumbnail vertical atualizada!',
+                          });
+                        } catch (error) {
+                          console.error('Erro:', error);
+                          toast({
+                            title: 'Erro',
+                            description: 'Não foi possível atualizar a thumbnail.',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      aspectRatio="vertical"
+                      label="Vertical"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Recomendado: 1080x1920px (9:16)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-end">
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? (

@@ -32,6 +32,9 @@ export interface Module {
   id: string;
   title: string;
   description: string | null;
+  thumbnail: string | null; // Deprecated - usar thumbnailHorizontal
+  thumbnailVertical: string | null; // Thumbnail vertical (9:16)
+  thumbnailHorizontal: string | null; // Thumbnail horizontal (16:9)
   order: number;
   courseId: string;
   createdAt: string;

@@ -13,10 +13,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useSidebarStore } from '@/lib/stores/sidebar-store';
 import { useRouter } from 'next/navigation';
 
 export function StudentHeader() {
   const { user, logout } = useAuthStore();
+  const { isCollapsed } = useSidebarStore();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -25,7 +27,11 @@ export function StudentHeader() {
   };
 
   return (
-    <header className="fixed left-0 md:left-60 right-0 top-0 z-30 h-16 border-b border-[rgb(var(--border))] bg-white dark:bg-gray-900">
+    <header 
+      className={`fixed right-0 top-0 z-30 h-16 border-b border-[rgb(var(--border))] bg-white dark:bg-gray-900 transition-all duration-300 ${
+        isCollapsed ? 'left-0 md:left-16' : 'left-0 md:left-60'
+      }`}
+    >
       <div className="flex h-full items-center justify-between px-4 md:px-6">
         {/* Espaço para o botão hamburguer em mobile */}
         <div className="w-12 md:hidden" />

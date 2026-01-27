@@ -7,9 +7,9 @@ import { coursesService } from '@/lib/api/courses.service';
 import { progressService, CourseProgress } from '@/lib/api/progress.service';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ArrowLeft, Play, CheckCircle2, Circle, Lock, BookOpen, Clock, Loader2 } from 'lucide-react';
+import { ArrowLeft, Play, CheckCircle2, BookOpen, Loader2 } from 'lucide-react';
 import { Course } from '@/lib/types/course.types';
+import { ModuleCard } from '@/components/student/module-card';
 
 export default function CourseDetailPage() {
   const router = useRouter();
@@ -245,9 +245,9 @@ export default function CourseDetailPage() {
         </div>
       </div>
 
-      {/* Conteúdo do curso */}
+      {/* Conteúdo do curso - Grid de Módulos */}
       <div className="container mx-auto px-6 py-8">
-        <h2 className="text-3xl font-bold mb-6 text-gray-900 tracking-tight">Conteúdo do Curso</h2>
+        <h2 className="text-3xl font-bold mb-6 text-gray-900 tracking-tight">Módulos do Curso</h2>
         
         {!course.modules || course.modules.length === 0 ? (
           <div className="text-center py-12 border border-gray-200 rounded-lg bg-white shadow-sm">
@@ -259,7 +259,7 @@ export default function CourseDetailPage() {
             </p>
           </div>
         ) : (
-          <Accordion type="multiple" defaultValue={course.modules.map(m => m.id)} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
             {course.modules.map((module, moduleIndex) => {
               const moduleVideos = module.videos || [];
               const moduleCompletedCount = moduleVideos.filter(v => isVideoCompleted(v.id)).length;
@@ -268,100 +268,18 @@ export default function CourseDetailPage() {
                 : 0;
 
               return (
-                <AccordionItem 
-                  key={module.id} 
-                  value={module.id}
-                  className="border border-gray-200 rounded-lg px-4 bg-white shadow-sm"
-                >
-                  <AccordionTrigger className="hover:no-underline">
-                    <div className="flex items-center justify-between w-full pr-4">
-                      <div className="flex items-center gap-3 text-left">
-                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-sm font-bold text-white shadow-sm">
-                          {moduleIndex + 1}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-gray-900">{module.title}</h3>
-                          <p className="text-sm text-gray-500">
-                            {moduleVideos.length} aulas • {moduleCompletedCount} concluídas
-                          </p>
-                        </div>
-                      </div>
-                      <div className={`text-sm font-semibold ${moduleProgress === 100 ? 'text-green-600' : 'text-blue-600'}`}>
-                        {moduleProgress}%
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                  
-                  <AccordionContent>
-                    {module.description && (
-                      <p className="text-sm text-gray-600 mb-4 px-11">
-                        {module.description}
-                      </p>
-                    )}
-                    
-                    {moduleVideos.length === 0 ? (
-                      <p className="text-sm text-gray-500 px-11 py-4">
-                        Nenhuma aula neste módulo
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {moduleVideos.map((video, videoIndex) => {
-                          const completed = isVideoCompleted(video.id);
-                          const watched = isVideoWatched(video.id);
-                          const isPublished = video.isPublished;
-                          
-                          return (
-                            <button
-                              key={video.id}
-                              onClick={() => isPublished ? handleVideoClick(video.id) : null}
-                              disabled={!isPublished}
-                              className={`
-                                w-full flex items-center gap-3 px-11 py-3 rounded-lg transition-all duration-200 text-left border
-                                ${!isPublished 
-                                  ? 'opacity-50 cursor-not-allowed border-gray-200 bg-gray-50' 
-                                  : completed
-                                    ? 'bg-green-50 border-green-200 hover:bg-green-100 hover:shadow-sm'
-                                    : watched
-                                      ? 'bg-amber-50 border-amber-200 hover:bg-amber-100 hover:shadow-sm'
-                                      : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-blue-200 hover:shadow-sm'
-                                }
-                              `}
-                            >
-                              <div className="flex-shrink-0">
-                                {completed ? (
-                                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                                ) : watched ? (
-                                  <Clock className="h-5 w-5 text-amber-600" />
-                                ) : isPublished ? (
-                                  <Circle className="h-5 w-5 text-gray-400" />
-                                ) : (
-                                  <Lock className="h-5 w-5 text-gray-400" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className={`font-semibold truncate ${completed ? 'text-green-700' : watched ? 'text-amber-700' : 'text-gray-900'}`}>
-                                  {videoIndex + 1}. {video.title}
-                                </p>
-                                {video.description && (
-                                  <p className="text-sm text-gray-600 truncate">
-                                    {video.description}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
-                                <Clock className="h-4 w-4" />
-                                <span>{formatDuration(video.duration)}</span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
+                <ModuleCard
+                  key={module.id}
+                  module={module}
+                  courseId={course.id}
+                  moduleIndex={moduleIndex}
+                  completedVideos={moduleCompletedCount}
+                  totalVideos={moduleVideos.length}
+                  progressPercentage={moduleProgress}
+                />
               );
             })}
-          </Accordion>
+          </div>
         )}
       </div>
     </div>

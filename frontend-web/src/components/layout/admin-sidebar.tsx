@@ -11,9 +11,9 @@ import {
   Folders,
   Video,
   Settings,
-  GraduationCap,
   Menu,
-  X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +23,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { useSidebarStore } from '@/lib/stores/sidebar-store';
 
 interface NavItem {
   title: string;
@@ -64,7 +65,13 @@ const navItems: NavItem[] = [
 ];
 
 // Componente de navegação reutilizável
-function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
+function SidebarNav({ 
+  onItemClick, 
+  isCollapsed = false 
+}: { 
+  onItemClick?: () => void;
+  isCollapsed?: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -82,18 +89,20 @@ function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
               'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200',
               isActive
                 ? 'bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 border-l-4 border-blue-600 shadow-sm'
-                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800',
+              isCollapsed && 'justify-center px-2'
             )}
+            title={isCollapsed ? item.title : undefined}
           >
             <Icon
               className={cn(
-                'h-5 w-5',
+                'h-5 w-5 flex-shrink-0',
                 isActive
                   ? 'text-blue-600'
                   : 'text-gray-500 dark:text-gray-400'
               )}
             />
-            <span>{item.title}</span>
+            {!isCollapsed && <span>{item.title}</span>}
           </Link>
         );
       })}
@@ -102,14 +111,28 @@ function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
 }
 
 // Logo reutilizável
-function SidebarLogo() {
+function SidebarLogo({ isCollapsed = false }: { isCollapsed?: boolean }) {
   return (
-    <Link href="/admin" className="flex items-center gap-2 transition-opacity hover:opacity-80">
-      <img 
-        src="/logoblack.webp" 
-        alt="Cirurgião Academy" 
-        className="h-10 w-auto object-contain"
-      />
+    <Link 
+      href="/admin" 
+      className={cn(
+        "flex items-center gap-2 transition-opacity hover:opacity-80",
+        isCollapsed && "justify-center"
+      )}
+    >
+      {isCollapsed ? (
+        <img 
+          src="/icone-logo.png" 
+          alt="Logo" 
+          className="h-8 w-8 object-contain"
+        />
+      ) : (
+        <img 
+          src="/logoblack.webp" 
+          alt="Cirurgião Academy" 
+          className="h-10 w-auto object-contain"
+        />
+      )}
     </Link>
   );
 }
@@ -141,17 +164,42 @@ export function MobileSidebar() {
   );
 }
 
-// Sidebar Desktop (Fixa)
+// Sidebar Desktop (Fixa com collapse)
 export function DesktopSidebar() {
+  const { isCollapsed, toggleSidebar } = useSidebarStore();
+
   return (
-    <aside className="hidden md:block fixed left-0 top-0 z-40 h-screen w-60 border-r-2 border-gray-200 bg-white dark:bg-gray-900">
+    <aside 
+      className={cn(
+        "hidden md:block fixed left-0 top-0 z-40 h-screen border-r-2 border-gray-200 bg-white dark:bg-gray-900 transition-all duration-300",
+        isCollapsed ? "w-20" : "w-60"
+      )}
+    >
       {/* Logo */}
-      <div className="flex h-16 items-center border-b-2 border-gray-200 px-6">
-        <SidebarLogo />
+      <div className="flex h-16 items-center justify-between border-b-2 border-gray-200 px-4">
+        <SidebarLogo isCollapsed={isCollapsed} />
+        
+        {/* Toggle Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleSidebar}
+          className={cn(
+            "h-8 w-8 rounded-full hover:bg-gray-100 transition-all",
+            isCollapsed && "mx-auto"
+          )}
+          title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </Button>
       </div>
 
       {/* Navigation */}
-      <SidebarNav />
+      <SidebarNav isCollapsed={isCollapsed} />
     </aside>
   );
 }

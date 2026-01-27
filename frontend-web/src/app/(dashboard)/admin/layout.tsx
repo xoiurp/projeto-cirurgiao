@@ -3,9 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useSidebarStore } from '@/lib/stores/sidebar-store';
 import { AdminSidebar } from '@/components/layout/admin-sidebar';
 import { AdminHeader } from '@/components/layout/admin-header';
 import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 /**
  * Layout compartilhado para todas as páginas admin
@@ -18,6 +20,7 @@ export default function AdminLayout({
 }) {
   const router = useRouter();
   const { user, isAuthenticated, hasHydrated, isLoading } = useAuthStore();
+  const { isCollapsed } = useSidebarStore(); // Mover para o topo, antes de qualquer return
 
   useEffect(() => {
     // Aguarda a hidratação e o carregamento antes de verificar autenticação
@@ -55,10 +58,14 @@ export default function AdminLayout({
       <AdminSidebar />
       <AdminHeader />
       
-      {/* Main Content Area - com margin para sidebar e header */}
+      {/* Main Content Area - com margin dinâmica para sidebar e header */}
       {/* Mobile: sem margem esquerda, padding menor */}
-      {/* Desktop: margem esquerda para sidebar, padding maior */}
-      <main className="ml-0 md:ml-60 mt-16 p-4 md:p-6 lg:p-8">
+      {/* Desktop: margem esquerda ajusta conforme sidebar (60px colapsado, 240px expandido) */}
+      <main className={cn(
+        "mt-16 p-4 md:p-6 lg:p-8 transition-all duration-300",
+        "ml-0", // Mobile: sem margem
+        isCollapsed ? "md:ml-20" : "md:ml-60" // Desktop: margem dinâmica
+      )}>
         {children}
       </main>
     </div>

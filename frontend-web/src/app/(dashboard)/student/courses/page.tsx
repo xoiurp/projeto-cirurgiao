@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { coursesService } from '@/lib/api/courses.service';
 import { progressService } from '@/lib/api/progress.service';
 import { CourseCard } from '@/components/student/course-card';
+import { HeroBanner } from '@/components/student/hero-banner';
 import { Loader2, Library, Search, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -115,6 +116,9 @@ export default function CoursesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Hero Banner */}
+      <HeroBanner />
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg">

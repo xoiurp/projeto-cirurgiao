@@ -12,7 +12,7 @@ interface CourseCardProps {
 
 export function CourseCard({ course }: CourseCardProps) {
   const { progress } = course;
-  const isEnrolled = course.enrollment.id !== '';
+  const isEnrolled = course.enrollment !== null && course.enrollment.id !== '';
   const isCompleted = progress.percentage === 100;
   const isStarted = progress.percentage > 0;
 
